@@ -1,87 +1,158 @@
-# A2A Agent Template
+# Schema Merging Benchmark - Green Agent
 
-A minimal template for building [A2A (Agent-to-Agent)](https://a2a-protocol.org/latest/) agents.
+A Green Agent for the AgentBeats competition that evaluates Purple Agents on their ability to merge database schemas, identify primary/foreign keys, and resolve naming inconsistencies.
+
+## What This Benchmark Evaluates
+
+This benchmark tests an agent's data engineering capabilities:
+
+| Skill | Description | Points |
+|-------|-------------|--------|
+| **Primary Key Identification** | Correctly identify the primary key for each table | 25 |
+| **Join Column Detection** | Find columns that can be used to join tables | 25 |
+| **Naming Inconsistency Detection** | Identify naming inconsistencies (case, conventions) | 25 |
+| **Schema Merging** | Produce a unified schema with normalized column names | 25 |
+
+## Difficulty Levels
+
+| Level | Tables | Challenges |
+|-------|--------|------------|
+| **Easy** | 2 | Obvious keys, single case inconsistency (`cust_id` vs `customer_ID`) |
+| **Medium** | 3 | Mixed conventions (snake_case, camelCase, UPPER_CASE) |
+| **Hard** | 5 | Complex relationships, ambiguous columns, self-referential joins |
+
+## Quick Start
+
+### Prerequisites
+
+```bash
+# Install uv if you don't have it
+curl -LsSf https://astral.sh/uv/install.sh | sh
+
+# Clone and setup
+git clone <your-repo-url>
+cd data-matchmaker-benchmark
+uv sync
+```
+
+### Running the Benchmark
+
+**Terminal 1 - Start the Green Agent (evaluator):**
+```bash
+uv run src/server.py --port 9009
+```
+
+**Terminal 2 - Start the Mock Purple Agent (for testing):**
+```bash
+# Copy and configure your Gemini API key
+cp sample.env .env
+# Edit .env and add your GOOGLE_API_KEY
+
+uv run src/mock_purple.py --port 9010
+```
+
+**Terminal 3 - Run an evaluation:**
+```bash
+# Easy difficulty
+curl -s -X POST http://localhost:9009/ \
+  -H "Content-Type: application/json" \
+  -d '{"jsonrpc": "2.0", "method": "message/send", "id": "1", "params": {"message": {"kind": "message", "role": "user", "parts": [{"kind": "text", "text": "{\"participants\": {\"schema_merger\": \"http://localhost:9010\"}, \"config\": {\"difficulty\": \"easy\"}}"}], "messageId": "test"}}}' | python3 -m json.tool
+
+# Medium difficulty
+curl -s -X POST http://localhost:9009/ \
+  -H "Content-Type: application/json" \
+  -d '{"jsonrpc": "2.0", "method": "message/send", "id": "1", "params": {"message": {"kind": "message", "role": "user", "parts": [{"kind": "text", "text": "{\"participants\": {\"schema_merger\": \"http://localhost:9010\"}, \"config\": {\"difficulty\": \"medium\"}}"}], "messageId": "test"}}}' | python3 -m json.tool
+
+# Hard difficulty
+curl -s -X POST http://localhost:9009/ \
+  -H "Content-Type: application/json" \
+  -d '{"jsonrpc": "2.0", "method": "message/send", "id": "1", "params": {"message": {"kind": "message", "role": "user", "parts": [{"kind": "text", "text": "{\"participants\": {\"schema_merger\": \"http://localhost:9010\"}, \"config\": {\"difficulty\": \"hard\"}}"}], "messageId": "test"}}}' | python3 -m json.tool
+```
 
 ## Project Structure
 
 ```
 src/
-├─ server.py      # Server setup and agent card configuration
-├─ executor.py    # A2A request handling
-├─ agent.py       # Your agent implementation goes here
-└─ messenger.py   # A2A messaging utilities
-tests/
-└─ test_agent.py  # Agent tests
-Dockerfile        # Docker configuration
-pyproject.toml    # Python dependencies
-.github/
-└─ workflows/
-   └─ test-and-publish.yml # CI workflow
+├── server.py        # A2A server setup and agent card
+├── agent.py         # Green agent: test generation + scoring
+├── executor.py      # A2A request handling
+├── messenger.py     # A2A messaging utilities
+└── mock_purple.py   # Baseline purple agent for testing
 ```
 
-## Getting Started
+## Input Format
 
-1. **Create your repository** - Click "Use this template" to create your own repository from this template
+The Green Agent expects a JSON message with:
 
-2. **Implement your agent** - Add your agent logic to [`src/agent.py`](src/agent.py)
+```json
+{
+  "participants": {
+    "schema_merger": "http://purple-agent-url:port"
+  },
+  "config": {
+    "difficulty": "easy|medium|hard"
+  }
+}
+```
 
-3. **Configure your agent card** - Fill in your agent's metadata (name, skills, description) in [`src/server.py`](src/server.py)
+## Output Format
 
-4. **Write your tests** - Add custom tests for your agent in [`tests/test_agent.py`](tests/test_agent.py)
+The Green Agent returns an evaluation result:
 
-For a concrete example of implementing an agent using this template, see this [draft PR](https://github.com/RDI-Foundation/agent-template/pull/8).
+```json
+{
+  "score": 87,
+  "max_score": 100,
+  "difficulty": "easy",
+  "details": {
+    "primary_keys": {"score": 25, "max": 25, "detail": "2/2 tables correct"},
+    "join_columns": {"score": 25, "max": 25, "detail": "1/1 join relationships found"},
+    "inconsistencies": {"score": 12, "max": 25, "detail": "Found 1 inconsistencies"},
+    "merged_schema": {"score": 25, "max": 25, "detail": "6/6 expected columns present"}
+  },
+  "test_case": { ... },
+  "purple_response": { ... }
+}
+```
 
-## Running Locally
+## Purple Agent Requirements
 
-```bash
-# Install dependencies
-uv sync
+Purple agents must return JSON with this structure:
 
-# Run the server
-uv run src/server.py
+```json
+{
+  "primary_keys": {"table_name": "column_name", ...},
+  "join_columns": [["table1.col", "table2.col"], ...],
+  "inconsistencies": ["description of inconsistency", ...],
+  "merged_schema": {"unified_table_name": ["col1", "col2", ...]}
+}
 ```
 
 ## Running with Docker
 
 ```bash
-# Build the image
-docker build -t my-agent .
+# Build the green agent
+docker build -t schema-evaluator .
 
-# Run the container
-docker run -p 9009:9009 my-agent
+# Run
+docker run -p 9009:9009 schema-evaluator
 ```
 
-## Testing
-
-Run A2A conformance tests against your agent.
+## Running Tests
 
 ```bash
-# Install test dependencies
 uv sync --extra test
-
-# Start your agent (uv or docker; see above)
-
-# Run tests against your running agent URL
-uv run pytest --agent-url http://localhost:9009
+uv run pytest tests/
 ```
 
-## Publishing
+## Competition Info
 
-The repository includes a GitHub Actions workflow that automatically builds, tests, and publishes a Docker image of your agent to GitHub Container Registry.
+This is a submission for the [AgentBeats Competition](https://rdi.berkeley.edu/agentx) Phase 1 (Green Agent).
 
-If your agent needs API keys or other secrets, add them in Settings → Secrets and variables → Actions → Repository secrets. They'll be available as environment variables during CI tests.
+- **Track**: Data Engineering / Other Agent
+- **Benchmark Type**: New benchmark
+- **Skills Tested**: Schema analysis, key identification, naming convention detection
 
-- **Push to `main`** → publishes `latest` tag:
-```
-ghcr.io/<your-username>/<your-repo-name>:latest
-```
+## License
 
-- **Create a git tag** (e.g. `git tag v1.0.0 && git push origin v1.0.0`) → publishes version tags:
-```
-ghcr.io/<your-username>/<your-repo-name>:1.0.0
-ghcr.io/<your-username>/<your-repo-name>:1
-```
-
-Once the workflow completes, find your Docker image in the Packages section (right sidebar of your repository). Configure the package visibility in package settings.
-
-> **Note:** Organization repositories may need package write permissions enabled manually (Settings → Actions → General). Version tags must follow [semantic versioning](https://semver.org/) (e.g., `v1.0.0`).
+MIT

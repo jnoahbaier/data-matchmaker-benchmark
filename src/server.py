@@ -24,16 +24,20 @@ def main():
     # See: https://a2a-protocol.org/latest/tutorials/python/3-agent-skills-and-card/
     
     skill = AgentSkill(
-        id="",
-        name="",
-        description="",
-        tags=[],
-        examples=[]
+        id="schema_evaluation",
+        name="Schema Merging Evaluation",
+        description="Evaluates agents on their ability to merge database schemas, identify primary/foreign keys, and resolve naming inconsistencies across tables.",
+        tags=["schema", "database", "evaluation", "data-warehouse", "keys"],
+        examples=[
+            "Evaluate schema merging for customers and orders tables",
+            "Test primary key identification across multiple CSVs",
+            "Assess naming inconsistency detection (cust_id vs customer_ID)"
+        ]
     )
 
     agent_card = AgentCard(
-        name="",
-        description="",
+        name="Schema Merging Evaluator",
+        description="A Green Agent that benchmarks Purple Agents on data warehouse schema merging tasks. Generates test cases with intentional schema challenges and scores responses.",
         url=args.card_url or f"http://{args.host}:{args.port}/",
         version='1.0.0',
         default_input_modes=['text'],
