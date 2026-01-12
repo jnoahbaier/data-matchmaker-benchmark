@@ -1,0 +1,48 @@
+{
+  "primary_keys": {
+    "persons": "CustomerID",
+    "relations": "CustomerID",
+    "tenure": "CustomerID",
+    "phones": "CustomerID",
+    "internet": "CustomerID"
+  },
+  "join_columns": [
+    [
+      "persons.CustomerID",
+      "relations.CustomerID"
+    ],
+    [
+      "relations.CustomerID",
+      "tenure.CustomerID"
+    ],
+    [
+      "tenure.CustomerID",
+      "phones.CustomerID"
+    ],
+    [
+      "phones.CustomerID",
+      "internet.CustomerID"
+    ],
+    [
+      "internet.CustomerID",
+      "internet.id"
+    ]
+  ],
+  "inconsistencies": [
+    "CustomerID vs id (ambiguous id)"
+  ],
+  "merged_schema": {
+    "customer_all": [
+      "customer_id",
+      "gender",
+      "senior_citizen",
+      "partner",
+      "dependents",
+      "tenure",
+      "phone_service",
+      "multiple_lines",
+      "internet_service",
+      "online_security"
+    ]
+  }
+}
