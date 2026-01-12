@@ -1,0 +1,25 @@
+{
+  "primary_keys": {
+    "profiles": "CustomerID",
+    "households": "CustomerID"
+  },
+  "join_columns": [
+    [
+      "profiles.CustomerID",
+      "households.CustomerID"
+    ]
+  ],
+  "inconsistencies": [
+    "Dependents vs dependents (case difference)"
+  ],
+  "merged_schema": {
+    "customer_profiles": [
+      "customer_id",
+      "gender",
+      "senior_citizen",
+      "partner",
+      "dependents",
+      "tenure"
+    ]
+  }
+}

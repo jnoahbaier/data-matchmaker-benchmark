@@ -1,0 +1,31 @@
+{
+  "primary_keys": {
+    "demographics": "CustomerID",
+    "family": "CustomerID",
+    "tenureInfo": "CustomerID"
+  },
+  "join_columns": [
+    [
+      "demographics.CustomerID",
+      "family.CustomerID"
+    ],
+    [
+      "family.CustomerID",
+      "tenureInfo.CustomerID"
+    ]
+  ],
+  "inconsistencies": [
+    "SeniorCitizen vs SENIOR_CITIZEN (case and underscore difference)",
+    "Partner vs partner (case difference)"
+  ],
+  "merged_schema": {
+    "customer_demographics": [
+      "customer_id",
+      "gender",
+      "senior_citizen",
+      "partner",
+      "dependents",
+      "tenure"
+    ]
+  }
+}

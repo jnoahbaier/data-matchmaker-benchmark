@@ -1,0 +1,48 @@
+{
+  "primary_keys": {
+    "users": "id",
+    "accounts": "id",
+    "tenure": "id",
+    "services": "id",
+    "internet": "id"
+  },
+  "join_columns": [
+    [
+      "users.id",
+      "accounts.id"
+    ],
+    [
+      "accounts.id",
+      "tenure.id"
+    ],
+    [
+      "tenure.id",
+      "services.id"
+    ],
+    [
+      "services.id",
+      "internet.id"
+    ],
+    [
+      "internet.department",
+      "internet.InternetService"
+    ]
+  ],
+  "inconsistencies": [
+    "CustomerID vs id (ambiguous id)",
+    "InternetService vs department (ambiguous column name)"
+  ],
+  "merged_schema": {
+    "customer_full": [
+      "customer_id",
+      "gender",
+      "senior_citizen",
+      "partner",
+      "tenure",
+      "phone_service",
+      "multiple_lines",
+      "internet_service",
+      "online_security"
+    ]
+  }
+}
