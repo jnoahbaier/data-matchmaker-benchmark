@@ -1,0 +1,14 @@
+# AgentBeats Scenario Configuration for TPC-DI Data Integration Benchmark
+# Run with: uv run agentbeats-run scenario.toml
+
+[green_agent]
+endpoint = "http://127.0.0.1:9009"
+cmd = "python src/server.py --host 127.0.0.1 --port 9009"
+
+[[participants]]
+role = "data_integrator"
+endpoint = "http://127.0.0.1:9010"
+cmd = "python src/mock_purple.py --host 127.0.0.1 --port 9010"
+
+[config]
+timeout = 300

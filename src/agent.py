@@ -15,17 +15,24 @@ import os
 import re
 from io import StringIO
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
 from dotenv import load_dotenv
 from google import genai
 from google.genai import types
 import pandas as pd
+from pydantic import BaseModel, HttpUrl, ValidationError
 from a2a.server.tasks import TaskUpdater
 from a2a.types import DataPart, Message, Part, TaskState, TextPart
 from a2a.utils import get_message_text, new_agent_text_message
 
-from messenger import Messenger
+from messenger import Messenger, A2ANetworkError, A2ATimeoutError, A2AConnectionError
+
+
+class EvalRequest(BaseModel):
+    """A2A assessment request format for AgentBeats platform."""
+    participants: dict[str, HttpUrl]
+    config: dict[str, Any]
 
 # Load environment variables from .env file
 load_dotenv()
@@ -57,6 +64,11 @@ class Agent:
     - LLM-powered feedback for qualitative insights
     """
 
+    # Required participant roles for assessment
+    required_roles: list[str] = ["data_integrator"]
+    # Required config keys (optional - add if you need config params like "timeout")
+    required_config_keys: list[str] = []
+
     def __init__(self):
         self.messenger = Messenger()
         self._ground_truth_df: Optional[pd.DataFrame] = None
@@ -79,6 +91,18 @@ class Agent:
             self._ground_truth_df = pd.read_csv(GROUND_TRUTH_FILE)
             logger.info(f"Loaded ground truth: {len(self._ground_truth_df)} rows")
         return self._ground_truth_df
+
+    def validate_request(self, request: EvalRequest) -> tuple[bool, str]:
+        """Validate the assessment request has required roles and config keys."""
+        missing_roles = set(self.required_roles) - set(request.participants.keys())
+        if missing_roles:
+            return False, f"Missing required participant roles: {missing_roles}"
+
+        missing_config_keys = set(self.required_config_keys) - set(request.config.keys())
+        if missing_config_keys:
+            return False, f"Missing required config keys: {missing_config_keys}"
+
+        return True, "ok"
 
     async def generate_llm_feedback(
         self,
@@ -194,217 +218,134 @@ Respond in JSON format with keys: summary, strengths, weaknesses, recommendation
             }
 
     async def run(self, message: Message, updater: TaskUpdater) -> None:
-        """Main entry point for assessment requests."""
+        """Main entry point for A2A assessment requests.
+        
+        Expects JSON in the format:
+        {
+            "participants": {"data_integrator": "<purple_agent_url>"},
+            "config": {}
+        }
+        """
         input_text = get_message_text(message)
         logger.info("Received assessment request")
 
+        # Parse and validate the A2A assessment request using Pydantic
         try:
-            request = json.loads(input_text)
-        except json.JSONDecodeError:
-            # Check if this is a plain text submission (CSV data)
-            if self._looks_like_csv(input_text):
-                await self._evaluate_csv_submission(input_text, updater)
+            request = EvalRequest.model_validate_json(input_text)
+            ok, validation_msg = self.validate_request(request)
+            if not ok:
+                logger.error(f"Request validation failed: {validation_msg}")
+                await updater.reject(new_agent_text_message(validation_msg))
                 return
-            
-            logger.error("Failed to parse request as JSON")
-            await updater.add_artifact(
-                parts=[Part(root=TextPart(text=(
-                    "Error: Expected JSON request or CSV data submission.\n\n"
-                    "For task request, send JSON with:\n"
-                    "  {'participants': {'data_integrator': '<purple_agent_url>'}, 'config': {}}\n\n"
-                    "Or submit CSV data directly for evaluation."
-                )))],
-                name="Error",
-            )
+        except ValidationError as e:
+            logger.error(f"Invalid request format: {e}")
+            await updater.reject(new_agent_text_message(f"Invalid request: {e}"))
             return
 
-        # Handle different request types
-        action = request.get("action", "evaluate")
-        
-        if action == "get_task":
-            await self._handle_get_task(request, updater)
-        elif action == "submit_result":
-            await self._handle_submit_result(request, updater)
-        elif action == "evaluate":
-            await self._handle_evaluate_agent(request, updater)
-        else:
-            await updater.add_artifact(
-                parts=[Part(root=TextPart(text=f"Unknown action: {action}"))],
-                name="Error",
-            )
-
-    async def _handle_get_task(self, request: dict, updater: TaskUpdater) -> None:
-        """Handle request to get the benchmark task information."""
-        mcp_url = os.getenv("MCP_SERVER_URL", "http://localhost:9009/mcp")
-        
-        task_info = {
-            "task_name": "TPC-DI Data Integration Benchmark",
-            "mcp_server_url": mcp_url,
-            "instructions": """
-Merge and aggregate data from the following source files to produce a customer-centric summary.
-
-## Source Files (fetch from MCP server):
-1. customers_tpcdi_lite_v3.csv - Customer demographics
-2. accounts_tpcdi_lite_v3.csv - Account information (links to customers via customer_id)
-3. trades_tpcdi_lite_v3.csv - Trade transactions (links to accounts via account_id)
-4. prospect_tpcdi_lite_v3.xlsx - Prospect data (optional)
-5. finwire_tpcdi_lite_v3.xml - Financial wire data (optional)
-
-## Task:
-Join the tables and compute per-customer aggregations:
-- customer_id: The customer identifier
-- customer_name: First name + " " + Last name
-- country: Customer's country
-- num_accounts: Count of accounts per customer
-- total_balance: Sum of account balances
-- num_trades: Count of COMPLETED trades (trade_status = 'CMPT')
-- total_trade_volume: Sum of trade quantities for completed trades
-- total_trade_value: Sum of (quantity * trade_price) for completed trades
-- symbols_traded: Comma-separated unique stock symbols traded
-
-## MCP Resources:
-- Use 'get_task_info' tool for detailed schema
-- Use 'list_files' tool to see available files
-- Use 'get_file_content' tool to fetch file contents
-
-## Submission:
-Send your result as JSON with action='submit_result' and 'data' containing CSV string or list of records.
-""",
-            "expected_columns": [
-                "customer_id", "customer_name", "country", "num_accounts",
-                "total_balance", "num_trades", "total_trade_volume",
-                "total_trade_value", "symbols_traded"
-            ]
-        }
-        
-        await updater.add_artifact(
-            parts=[Part(root=DataPart(data=task_info))],
-            name="Task Information",
+        await updater.update_status(
+            TaskState.working,
+            new_agent_text_message(f"Starting assessment.\n{request.model_dump_json()}")
         )
 
-    async def _handle_submit_result(self, request: dict, updater: TaskUpdater) -> None:
-        """Handle submission of integration results for evaluation."""
-        data = request.get("data")
-        
-        if not data:
-            await updater.add_artifact(
-                parts=[Part(root=TextPart(text="Error: No 'data' field in submission"))],
-                name="Error",
-            )
-            return
-        
+        # Run the assessment with proper cleanup
         try:
-            # Parse submitted data
-            if isinstance(data, str):
-                # CSV string
-                submitted_df = pd.read_csv(StringIO(data))
-            elif isinstance(data, list):
-                # List of records
-                submitted_df = pd.DataFrame(data)
-            elif isinstance(data, dict):
-                # Single record or column-oriented dict
-                if all(isinstance(v, list) for v in data.values()):
-                    submitted_df = pd.DataFrame(data)
-                else:
-                    submitted_df = pd.DataFrame([data])
-            else:
-                await updater.add_artifact(
-                    parts=[Part(root=TextPart(text=f"Error: Invalid data format: {type(data)}"))],
-                    name="Error",
-                )
-                return
-            
-            # Step 1: Deterministic numerical evaluation
-            score, details = self.evaluate_submission(submitted_df)
-            
-            # Step 2: LLM-powered qualitative feedback
-            llm_feedback = await self.generate_llm_feedback(submitted_df, score, details)
-            
-            result = {
-                "score": score,
-                "max_score": 100,
-                "details": details,
-                "llm_feedback": llm_feedback,
-                "submitted_rows": len(submitted_df),
-                "expected_rows": len(self.ground_truth),
-            }
-            
-            await updater.add_artifact(
-                parts=[Part(root=DataPart(data=result))],
-                name="Evaluation Result",
-            )
-            
-        except Exception as e:
-            logger.error(f"Error evaluating submission: {e}")
-            await updater.add_artifact(
-                parts=[Part(root=TextPart(text=f"Error evaluating submission: {e}"))],
-                name="Error",
-            )
+            await self._run_assessment(request, updater)
+        finally:
+            self.messenger.reset()
 
-    async def _handle_evaluate_agent(self, request: dict, updater: TaskUpdater) -> None:
-        """Handle full evaluation flow with a Purple Agent."""
-        participants = request.get("participants", {})
-        config = request.get("config", {})
+    async def _run_assessment(self, request: EvalRequest, updater: TaskUpdater) -> None:
+        """Run the full assessment flow with a Purple Agent.
         
-        purple_url = (
-            participants.get("data_integrator") or 
-            participants.get("purple") or
-            participants.get("agent")
-        )
-        
-        if not purple_url:
-            # No purple agent specified, return task info
-            await self._handle_get_task(request, updater)
-            return
+        Args:
+            request: Validated EvalRequest with participants and config
+            updater: TaskUpdater for sending status updates and artifacts
+        """
+        purple_url = str(request.participants["data_integrator"])
+        config = request.config
         
         logger.info(f"Evaluating Purple Agent at: {purple_url}")
         
         await updater.update_status(
             TaskState.working,
-            new_agent_text_message("Sending task to Purple Agent...")
+            new_agent_text_message(f"Sending task to Purple Agent at {purple_url}...")
         )
         
-        # Get MCP URL
-        mcp_url = os.getenv("MCP_SERVER_URL", "http://localhost:9009/mcp")
+        # Get the file server URL (the green agent's own URL)
+        # This can be configured via config, environment, or defaults to localhost
+        file_server_url = (
+            config.get("file_server_url") or 
+            os.getenv("FILE_SERVER_URL") or 
+            "http://localhost:9009"
+        )
         
-        # Send task to Purple Agent
-        task_message = json.dumps({
-            "action": "data_integration",
-            "mcp_server_url": mcp_url,
-            "task": """
-Perform TPC-DI data integration:
-1. Connect to the MCP server at the provided URL
-2. Fetch source files: customers_tpcdi_lite_v3.csv, accounts_tpcdi_lite_v3.csv, trades_tpcdi_lite_v3.csv
-3. Join tables: accounts.customer_id -> customers.customer_id, trades.account_id -> accounts.account_id
-4. Filter to completed trades only (trade_status = 'CMPT')
-5. Aggregate per customer:
-   - customer_name = first_name + " " + last_name
-   - country
-   - num_accounts = count of accounts
-   - total_balance = sum of account balances
-   - num_trades = count of completed trades
-   - total_trade_volume = sum of trade quantities
-   - total_trade_value = sum of (quantity * trade_price)
-   - symbols_traded = comma-separated unique symbols
-6. Return result as CSV string
-""",
-            "expected_columns": [
-                "customer_id", "customer_name", "country", "num_accounts",
-                "total_balance", "num_trades", "total_trade_volume",
-                "total_trade_value", "symbols_traded"
-            ]
-        })
-        
+        # Build the task message for the Purple Agent with HTTP file download URLs
+        task_message = f"""Perform TPC-DI data integration:
+
+## Task Overview
+Download source data files, join them, and compute per-customer aggregations.
+
+## Step 1: Download Source Files
+Fetch the following CSV files via HTTP GET:
+- {file_server_url}/files/customers_tpcdi_lite_v3.csv
+- {file_server_url}/files/accounts_tpcdi_lite_v3.csv
+- {file_server_url}/files/trades_tpcdi_lite_v3.csv
+
+You can also list all available files at: {file_server_url}/files/
+
+## Step 2: Join Tables
+- Join accounts to customers on: accounts.customer_id = customers.customer_id
+- Join trades to accounts on: trades.account_id = accounts.account_id
+
+## Step 3: Filter Data
+- Only include trades with trade_status = 'CMPT' (completed trades)
+
+## Step 4: Aggregate Per Customer
+Compute the following for each customer:
+- customer_id: The customer identifier
+- customer_name: first_name + " " + last_name
+- country: Customer's country
+- num_accounts: Count of accounts owned by customer
+- total_balance: Sum of all account balances
+- num_trades: Count of completed trades
+- total_trade_volume: Sum of trade quantities
+- total_trade_value: Sum of (quantity * trade_price)
+- symbols_traded: Comma-separated list of unique stock symbols traded
+
+## Step 5: Return Result
+Return your result as CSV data with these columns:
+customer_id, customer_name, country, num_accounts, total_balance, num_trades, total_trade_volume, total_trade_value, symbols_traded"""
+
         try:
-            timeout = config.get("timeout", 300)
+            timeout = int(config.get("timeout", 300))
             response_text = await self.messenger.talk_to_agent(
                 message=task_message,
                 url=purple_url,
                 new_conversation=True,
                 timeout=timeout
             )
+        except A2ATimeoutError as e:
+            logger.error(f"Purple Agent timed out: {e}")
+            await updater.add_artifact(
+                parts=[Part(root=TextPart(text=f"Purple Agent timed out after {timeout}s. The agent may be overloaded or unresponsive."))],
+                name="Error",
+            )
+            return
+        except A2AConnectionError as e:
+            logger.error(f"Failed to connect to Purple Agent: {e}")
+            await updater.add_artifact(
+                parts=[Part(root=TextPart(text=f"Failed to connect to Purple Agent at {purple_url}. Please verify the agent is running and accessible."))],
+                name="Error",
+            )
+            return
+        except A2ANetworkError as e:
+            logger.error(f"Network error with Purple Agent: {e}")
+            await updater.add_artifact(
+                parts=[Part(root=TextPart(text=f"Network error communicating with Purple Agent: {e}"))],
+                name="Error",
+            )
+            return
         except Exception as e:
-            logger.error(f"Error communicating with Purple Agent: {e}")
+            logger.error(f"Unexpected error communicating with Purple Agent: {e}")
             await updater.add_artifact(
                 parts=[Part(root=TextPart(text=f"Error communicating with Purple Agent: {e}"))],
                 name="Error",
@@ -413,25 +354,30 @@ Perform TPC-DI data integration:
         
         await updater.update_status(
             TaskState.working,
-            new_agent_text_message("Evaluating response...")
+            new_agent_text_message(f"Purple Agent responded. Evaluating response...")
         )
         
-        # Parse and evaluate response
+        # Parse the response - try JSON first, then CSV extraction
+        data = None
         try:
             response = json.loads(response_text)
             data = response.get("data") or response.get("result") or response.get("csv")
         except json.JSONDecodeError:
-            # Try to extract CSV directly
+            # Try to extract CSV directly from the response text
             data = self._extract_csv(response_text)
         
         if not data:
-            await updater.add_artifact(
-                parts=[Part(root=TextPart(text="Error: Could not extract data from Purple Agent response"))],
-                name="Error",
-            )
-            return
+            # If no structured data, treat the entire response as potential CSV
+            if self._looks_like_csv(response_text):
+                data = response_text
+            else:
+                await updater.add_artifact(
+                    parts=[Part(root=TextPart(text="Error: Could not extract data from Purple Agent response"))],
+                    name="Error",
+                )
+                return
         
-        # Evaluate
+        # Evaluate the submission
         try:
             if isinstance(data, str):
                 submitted_df = pd.read_csv(StringIO(data))
@@ -461,7 +407,10 @@ Perform TPC-DI data integration:
             }
             
             await updater.add_artifact(
-                parts=[Part(root=DataPart(data=result))],
+                parts=[
+                    Part(root=TextPart(text=f"Assessment complete. Score: {score}/100")),
+                    Part(root=DataPart(data=result)),
+                ],
                 name="Evaluation Result",
             )
             
@@ -469,36 +418,6 @@ Perform TPC-DI data integration:
             logger.error(f"Error evaluating Purple Agent response: {e}")
             await updater.add_artifact(
                 parts=[Part(root=TextPart(text=f"Error evaluating response: {e}"))],
-                name="Error",
-            )
-
-    async def _evaluate_csv_submission(self, csv_text: str, updater: TaskUpdater) -> None:
-        """Evaluate a direct CSV submission."""
-        try:
-            submitted_df = pd.read_csv(StringIO(csv_text))
-            
-            # Step 1: Deterministic numerical evaluation
-            score, details = self.evaluate_submission(submitted_df)
-            
-            # Step 2: LLM-powered qualitative feedback
-            llm_feedback = await self.generate_llm_feedback(submitted_df, score, details)
-            
-            result = {
-                "score": score,
-                "max_score": 100,
-                "details": details,
-                "llm_feedback": llm_feedback,
-                "submitted_rows": len(submitted_df),
-                "expected_rows": len(self.ground_truth),
-            }
-            
-            await updater.add_artifact(
-                parts=[Part(root=DataPart(data=result))],
-                name="Evaluation Result",
-            )
-        except Exception as e:
-            await updater.add_artifact(
-                parts=[Part(root=TextPart(text=f"Error parsing CSV: {e}"))],
                 name="Error",
             )
 
