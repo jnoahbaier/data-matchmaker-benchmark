@@ -1,0 +1,121 @@
+customer_id,tax_id,status,last_name,first_name,middle_initial,gender,dob,email,phone,address_line1,address_line2,city,state,postal_code,country,signup_date
+1,619-37-1614,ACTIVE,Martinez,Daniel,N,M,1975-11-02,daniel.martinez1145@demo.net,+1-446-292-7955,978 Pine St,Apt 2388,New York,NY,57931,Brazil,2003-04-29
+2,529-28-9858,ACTIVE,Torres,Patricia,S,M,1987-07-02,patricia.torres9180@brokerage.test,+1-898-385-2688,9538 Oak St,,Newark,NJ,27455,United States,2004-08-16
+3,537-50-8628,INACTIVE,Rivera,Emily,L,U,1954-10-02,emily.rivera4071@brokerage.test,+1-384-915-4999,1351 2nd St,,Philadelphia,PA,99181,United Kingdom,2005-12-24
+4,268-53-3490,INACTIVE,Perez,Timothy,N,U,1996-08-10,timothy.perez1272@example.com,+1-982-771-6140,5582 Park St,,New York,NY,77100,Germany,2005-05-06
+5,162-99-6072,INACTIVE,Phillips,Donna,J,M,1979-02-27,donna.phillips5686@demo.net,+1-223-672-6823,2763 Pine St,,Philadelphia,PA,97051,France,2003-05-14
+6,270-67-7580,INACTIVE,Roberts,Susan,E,M,1968-03-24,susan.roberts9015@demo.net,+1-485-923-7804,5888 Sunset St,Apt 619,Boston,MA,75078,South Africa,2003-06-15
+7,369-46-1067,ACTIVE,Lopez,Jennifer,N,M,1959-04-22,jennifer.lopez9992@brokerage.test,+1-779-526-3056,8455 Mission St,,Philadelphia,PA,87217,United States,2004-01-09
+8,749-61-2019,ACTIVE,Roberts,Angela,C,F,1993-09-13,angela.roberts7220@mail.com,+1-366-312-6571,9852 Mission St,,Boston,MA,23570,South Africa,2005-09-13
+9,252-91-5132,INACTIVE,Martinez,Joshua,T,U,1984-02-12,joshua.martinez7769@brokerage.test,+1-325-318-8996,7644 Howard St,,New York,NY,37256,United States,2005-02-09
+10,123-36-9654,INACTIVE,Martinez,Jennifer,E,U,1956-12-11,jennifer.martinez8653@example.com,+1-505-858-2491,4288 Park St,Apt 1457,Philadelphia,PA,31160,France,2005-11-23
+11,925-40-7564,ACTIVE,Anderson,Stephanie,G,U,1984-09-25,stephanie.anderson5826@demo.net,+1-948-229-1457,4587 Howard St,,Miami,FL,90377,Spain,2004-02-04
+12,204-39-8701,ACTIVE,Hill,George,K,U,1972-08-26,george.hill7908@mail.com,+1-839-824-1031,7865 Park St,Apt 348,Seattle,WA,20556,Spain,2004-03-27
+13,908-91-6447,ACTIVE,Nelson,Amy,Z,U,1957-07-26,amy.nelson7589@demo.net,+1-611-961-2391,2612 Maple St,Apt 113,Philadelphia,PA,33399,United Kingdom,2005-06-07
+14,259-80-9983,ACTIVE,Nguyen,Elizabeth,A,U,1979-11-05,elizabeth.nguyen1684@example.com,+1-739-967-3281,7117 Oak St,Apt 865,Philadelphia,PA,96149,Japan,2004-12-18
+15,954-26-1997,INACTIVE,Taylor,Mary,O,M,1963-05-17,mary.taylor8220@demo.net,+1-333-744-3487,8587 Market St,Apt 751,Seattle,WA,43995,Japan,2005-05-08
+16,433-97-9492,INACTIVE,Smith,Kenneth,Z,M,1999-03-06,kenneth.smith9180@example.com,+1-258-454-4134,4547 Mission St,,Atlanta,GA,25772,Mexico,2003-05-07
+17,720-75-4267,INACTIVE,Lewis,Paul,O,M,1985-01-25,paul.lewis8320@demo.net,+1-453-915-9572,4263 Oak St,Apt 562,Seattle,WA,90285,Mexico,2005-11-01
+18,785-48-3004,ACTIVE,Davis,Mark,W,M,1975-08-11,mark.davis2343@brokerage.test,+1-459-340-8663,3607 Pine St,,Boston,MA,19584,United Kingdom,2004-03-11
+19,531-35-6842,INACTIVE,Hernandez,Ashley,C,U,1992-04-06,ashley.hernandez320@brokerage.test,+1-546-767-8514,7226 Market St,,Newark,NJ,62928,South Africa,2004-11-25
+20,378-15-3974,INACTIVE,Flores,Kimberly,Y,M,1968-09-03,kimberly.flores6919@mail.com,+1-892-464-7651,2457 Howard St,,New York,NY,21018,United Kingdom,2004-06-27
+21,920-43-2372,ACTIVE,Moore,Jennifer,C,F,1953-12-06,jennifer.moore1994@brokerage.test,+1-664-211-6556,9071 Valencia St,Apt 1098,Chicago,IL,12206,Germany,2003-07-01
+22,285-35-6111,INACTIVE,Rodriguez,Michelle,Q,M,1952-09-23,michelle.rodriguez4751@mail.com,+1-656-712-3914,4442 Park St,Apt 1026,Austin,TX,44327,Germany,2003-04-14
+23,557-23-8080,INACTIVE,Smith,John,R,U,1951-12-17,john.smith8302@demo.net,+1-515-904-4525,3771 3rd St,,Newark,NJ,72227,United Kingdom,2004-05-18
+24,172-90-5187,INACTIVE,Rivera,Timothy,F,F,1996-11-05,timothy.rivera1385@example.com,+1-881-590-9289,4629 Elm St,,San Francisco,CA,27015,Spain,2003-01-30
+25,660-51-5005,ACTIVE,Robinson,John,J,F,1961-03-09,john.robinson5843@mail.com,+1-387-201-6494,6262 Broad St,,Chicago,IL,57728,United States,2004-11-04
+26,509-85-1682,INACTIVE,Adams,Paul,A,M,1962-04-17,paul.adams4985@brokerage.test,+1-844-438-2384,9604 Cedar St,,Chicago,IL,21764,Germany,2003-10-22
+27,144-75-8032,ACTIVE,Turner,Melissa,Q,F,1988-07-25,melissa.turner9570@example.com,+1-928-899-4767,1404 Market St,,Austin,TX,47247,Mexico,2003-10-24
+28,741-78-5006,INACTIVE,White,Kevin,I,F,1956-07-27,kevin.white7487@example.com,+1-271-966-9240,8778 Broad St,,San Francisco,CA,92282,Brazil,2003-02-08
+29,857-93-8542,INACTIVE,Mitchell,Robert,M,M,1997-08-09,robert.mitchell7849@example.com,+1-900-494-1765,3258 Broad St,,Miami,FL,36898,France,2004-04-17
+30,593-17-8959,INACTIVE,Taylor,Nancy,V,F,1991-12-23,nancy.taylor3567@example.com,+1-891-701-5765,8472 2nd St,,Atlanta,GA,27490,Japan,2003-01-26
+31,569-19-9300,INACTIVE,Roberts,Sandra,I,F,1957-09-07,sandra.roberts3438@demo.net,+1-415-276-2479,2332 Main St,Apt 544,Philadelphia,PA,12294,Germany,2004-08-16
+32,503-13-3606,ACTIVE,Parker,Kenneth,P,M,1990-09-09,kenneth.parker6643@demo.net,+1-509-944-3305,6828 Park St,,Miami,FL,75259,Spain,2005-09-22
+33,857-47-5148,INACTIVE,Evans,Linda,C,F,1971-01-11,linda.evans6393@demo.net,+1-803-278-6909,7023 Main St,Apt 1150,New York,NY,35656,South Africa,2003-01-25
+34,423-34-7116,INACTIVE,Brown,Michael,A,M,1992-05-21,michael.brown9080@demo.net,+1-762-408-2320,820 Valencia St,,Chicago,IL,67178,United Kingdom,2005-11-12
+35,524-53-5616,INACTIVE,Rodriguez,Ronald,I,M,1991-05-16,ronald.rodriguez6656@brokerage.test,+1-871-444-5928,7926 Sunset St,,Austin,TX,32382,Brazil,2005-08-25
+36,877-67-8002,ACTIVE,Hernandez,Carol,R,F,1954-04-17,carol.hernandez4000@mail.com,+1-292-378-6602,9117 Broad St,,Miami,FL,69373,Brazil,2004-11-12
+37,315-58-5427,INACTIVE,Taylor,Lisa,Y,M,2001-10-07,lisa.taylor8162@example.com,+1-484-788-6900,2072 Oak St,,Boston,MA,64248,South Africa,2005-12-09
+38,133-64-8754,INACTIVE,Thomas,Rebecca,A,F,1974-07-21,rebecca.thomas6415@example.com,+1-740-679-8355,4080 Pine St,,Chicago,IL,12858,South Africa,2003-09-18
+39,101-26-4810,ACTIVE,King,Elizabeth,U,U,1993-02-27,elizabeth.king2097@brokerage.test,+1-841-457-9654,7176 Pine St,,New York,NY,82286,Mexico,2003-03-22
+40,650-48-8547,INACTIVE,King,Karen,K,F,1987-04-13,karen.king7788@mail.com,+1-738-440-9962,4057 Market St,Apt 1260,Atlanta,GA,10150,United Kingdom,2003-01-22
+41,783-64-7065,ACTIVE,Johnson,Patricia,P,U,1962-08-22,patricia.johnson5539@example.com,+1-935-630-6936,6503 Oak St,,New York,NY,43719,South Africa,2004-04-11
+42,576-38-5342,INACTIVE,Mitchell,Charles,D,F,1982-02-07,charles.mitchell9996@demo.net,+1-391-428-8947,6842 Mission St,Apt 600,Chicago,IL,35419,United Kingdom,2004-04-17
+43,288-60-8366,INACTIVE,Sanchez,Sharon,X,U,1953-04-01,sharon.sanchez1301@example.com,+1-369-537-4124,3049 Folsom St,,Boston,MA,16794,Canada,2003-05-04
+44,386-20-6758,INACTIVE,Campbell,Brian,D,F,1974-06-11,brian.campbell6229@mail.com,+1-565-987-6057,7095 Broad St,,New York,NY,10376,Canada,2003-06-10
+45,746-62-5063,INACTIVE,Gonzalez,Steven,B,M,1973-09-15,steven.gonzalez572@demo.net,+1-675-264-2015,4220 Oak St,,Seattle,WA,72198,Spain,2003-03-04
+46,382-48-1061,ACTIVE,Hill,Rebecca,A,F,1971-06-09,rebecca.hill1758@mail.com,+1-686-932-8630,6342 Main St,Apt 2022,San Francisco,CA,44363,Japan,2004-10-10
+47,435-50-8549,INACTIVE,Cook,William,Z,U,1981-03-01,william.cook8387@example.com,+1-402-601-3620,4061 Valencia St,,Austin,TX,89594,France,2004-04-28
+48,739-20-4413,ACTIVE,Walker,John,N,M,1985-09-11,john.walker7324@demo.net,+1-377-439-3177,6839 Folsom St,,New York,NY,19458,South Africa,2004-06-26
+49,680-44-7110,INACTIVE,Thomas,Amanda,X,U,1997-09-28,amanda.thomas3264@brokerage.test,+1-649-453-4043,4029 Elm St,,Chicago,IL,48506,Germany,2004-07-26
+50,638-39-2647,INACTIVE,Murphy,Timothy,B,M,1987-04-11,timothy.murphy74@example.com,+1-686-436-8344,6135 Mission St,Apt 954,Chicago,IL,42237,South Africa,2005-11-05
+51,986-32-8358,INACTIVE,Brown,Linda,Y,U,1962-10-27,linda.brown1734@example.com,+1-852-810-6729,3575 Mission St,,New York,NY,58789,United Kingdom,2005-11-15
+52,794-57-4033,INACTIVE,Williams,Elizabeth,C,U,1963-05-02,elizabeth.williams516@mail.com,+1-707-761-8921,1046 Valencia St,,San Francisco,CA,52893,United Kingdom,2005-04-17
+53,519-46-6039,INACTIVE,Nelson,Betty,B,U,1985-03-21,betty.nelson9282@brokerage.test,+1-565-624-7823,308 Park St,,Austin,TX,62136,Germany,2004-07-09
+54,515-83-6975,INACTIVE,Campbell,Betty,Y,F,1975-04-01,betty.campbell2130@mail.com,+1-215-252-3334,6509 Broad St,,Boston,MA,24881,Canada,2003-07-05
+55,275-18-2782,INACTIVE,White,Sharon,P,M,1997-09-06,sharon.white4942@mail.com,+1-329-244-8909,5163 Mission St,,Chicago,IL,31209,Spain,2005-12-03
+56,729-35-8748,ACTIVE,Harris,Kevin,S,U,1955-12-20,kevin.harris684@mail.com,+1-609-730-3563,6294 Park St,,Miami,FL,91402,Canada,2005-04-08
+57,713-68-6017,INACTIVE,Campbell,Jessica,J,U,2002-04-02,jessica.campbell6976@mail.com,+1-598-874-7020,7330 Folsom St,,Seattle,WA,25431,United States,2005-03-09
+58,509-23-2099,ACTIVE,Flores,James,L,F,1981-08-08,james.flores5986@demo.net,+1-293-652-9263,8368 Mission St,,Philadelphia,PA,33536,Japan,2005-08-27
+59,486-93-3231,ACTIVE,Garcia,William,C,U,1996-06-25,william.garcia3174@example.com,+1-334-703-5716,2715 Elm St,,New York,NY,17112,Brazil,2005-10-29
+60,360-74-8866,ACTIVE,Flores,Matthew,S,F,1998-05-06,matthew.flores8291@brokerage.test,+1-443-526-7099,613 Oak St,,Chicago,IL,69821,Japan,2003-10-22
+61,149-91-6894,INACTIVE,Green,David,R,F,1967-11-11,david.green4130@example.com,+1-748-844-7459,6096 Main St,,Chicago,IL,25083,Canada,2005-12-22
+62,403-76-5155,INACTIVE,Torres,Lisa,U,M,1959-06-11,lisa.torres30@brokerage.test,+1-965-234-4631,2457 2nd St,,Miami,FL,33167,Mexico,2003-04-09
+63,122-16-1042,INACTIVE,Clark,Margaret,J,M,1982-06-02,margaret.clark8571@example.com,+1-565-746-4674,6780 2nd St,,Miami,FL,90284,Mexico,2003-04-04
+64,198-18-3370,INACTIVE,White,Susan,M,M,1989-08-06,susan.white189@brokerage.test,+1-257-860-6739,9753 Folsom St,,Miami,FL,29570,United States,2005-07-12
+65,515-33-4893,ACTIVE,Campbell,Kimberly,B,M,1981-04-06,kimberly.campbell203@example.com,+1-827-764-4231,2340 Valencia St,,San Francisco,CA,79668,United States,2003-02-21
+66,165-48-1794,INACTIVE,Adams,Kenneth,W,F,1982-11-21,kenneth.adams6147@example.com,+1-647-963-8622,1328 Folsom St,,Austin,TX,76660,Japan,2004-09-25
+67,751-80-8144,INACTIVE,Taylor,Michael,J,M,1964-11-02,michael.taylor1400@mail.com,+1-719-215-3781,4275 Elm St,Apt 831,Chicago,IL,16885,Spain,2004-06-28
+68,583-77-1104,ACTIVE,Mitchell,David,N,F,1970-04-13,david.mitchell9345@mail.com,+1-515-417-7415,9600 Broad St,,Miami,FL,59735,Japan,2005-08-19
+69,817-13-1505,ACTIVE,Martinez,David,E,M,1952-01-04,david.martinez1112@example.com,+1-954-247-2077,9684 Park St,,Austin,TX,55201,Japan,2003-10-18
+70,308-24-1554,ACTIVE,Wright,Ryan,Z,U,1992-02-28,ryan.wright4709@example.com,+1-688-302-3173,1613 Oak St,,New York,NY,42319,South Africa,2004-02-26
+71,887-87-9253,INACTIVE,Ramirez,Nancy,J,F,1966-01-12,nancy.ramirez6766@example.com,+1-231-646-9497,1620 Park St,,San Francisco,CA,58237,France,2004-10-19
+72,101-77-4310,INACTIVE,Wright,Patricia,Y,M,1986-04-23,patricia.wright72@example.com,+1-556-702-2567,8062 Maple St,Apt 2428,Chicago,IL,32330,Japan,2005-06-12
+73,269-24-2325,INACTIVE,Evans,Matthew,Z,M,1982-05-19,matthew.evans5352@example.com,+1-564-297-7574,6475 Broad St,,Miami,FL,40346,France,2005-10-17
+74,488-90-4826,INACTIVE,Johnson,Carol,E,F,1973-04-10,carol.johnson5710@example.com,+1-795-534-9548,2554 Folsom St,,Newark,NJ,75691,South Africa,2003-12-17
+75,442-69-4898,ACTIVE,Lee,Deborah,I,U,1960-08-15,deborah.lee2533@brokerage.test,+1-940-359-5056,5360 Park St,,Atlanta,GA,40280,France,2003-09-16
+76,251-48-5872,INACTIVE,Gonzalez,Daniel,I,M,1966-12-04,daniel.gonzalez1791@mail.com,+1-853-309-5600,3392 Sunset St,,Miami,FL,60362,Germany,2003-11-06
+77,245-42-7630,ACTIVE,Sanchez,James,X,M,2000-07-23,james.sanchez7046@mail.com,+1-917-787-7900,3754 Elm St,,Chicago,IL,70722,Brazil,2003-02-15
+78,830-90-3563,INACTIVE,Davis,Carol,N,F,1979-07-11,carol.davis7458@demo.net,+1-220-836-7706,8501 Maple St,Apt 1344,Boston,MA,41771,Germany,2005-03-30
+79,833-35-9506,INACTIVE,Smith,Stephanie,D,M,1974-08-04,stephanie.smith8865@demo.net,+1-409-934-8794,8401 Market St,,Newark,NJ,38558,France,2003-11-26
+80,501-75-3005,INACTIVE,White,Amy,U,U,1983-06-14,amy.white4137@example.com,+1-480-591-7548,1017 Market St,,Miami,FL,99700,Mexico,2004-01-12
+81,410-61-9635,ACTIVE,Clark,Jose,Z,F,1990-12-22,jose.clark7572@demo.net,+1-417-368-3118,1138 Oak St,,Chicago,IL,24320,Japan,2004-04-04
+82,898-70-6812,ACTIVE,Campbell,Emily,I,U,1964-03-12,emily.campbell4155@demo.net,+1-636-895-4045,7900 Market St,Apt 1152,Philadelphia,PA,48580,South Africa,2003-09-14
+83,775-56-3502,INACTIVE,Thomas,Matthew,M,F,1991-05-11,matthew.thomas1398@example.com,+1-778-532-3300,8704 Park St,,Boston,MA,91705,Mexico,2003-06-24
+84,692-28-4827,ACTIVE,Nelson,James,Y,U,1950-04-03,james.nelson5677@demo.net,+1-356-413-7594,8767 Maple St,,Chicago,IL,89718,France,2003-07-27
+85,643-20-8185,ACTIVE,Hill,George,R,U,2000-02-22,george.hill4334@example.com,+1-629-439-3282,7763 Howard St,,Miami,FL,74810,France,2004-03-12
+86,264-51-8667,INACTIVE,Robinson,Steven,V,M,1959-12-16,steven.robinson7632@brokerage.test,+1-583-636-7861,1245 Maple St,,Austin,TX,80718,Mexico,2003-01-14
+87,596-28-1555,ACTIVE,Adams,Kevin,W,M,1951-01-20,kevin.adams2080@demo.net,+1-546-296-6999,5602 Howard St,,New York,NY,76928,Spain,2005-09-18
+88,946-47-5798,INACTIVE,Roberts,Emily,,F,1963-05-14,emily.roberts6615@demo.net,+1-541-715-5451,8307 Park St,Apt 2017,Chicago,IL,82617,South Africa,2003-04-18
+89,903-15-7535,INACTIVE,Davis,Jason,R,U,1971-04-11,jason.davis6529@example.com,+1-507-311-1101,770 Oak St,Apt 1946,Austin,TX,86867,France,2003-06-29
+90,741-96-2359,ACTIVE,Roberts,Kenneth,B,U,1992-01-26,kenneth.roberts2850@demo.net,+1-303-879-3970,615 Valencia St,,Atlanta,GA,59288,Brazil,2003-10-29
+91,289-63-1561,INACTIVE,Cook,Jose,A,M,1991-01-12,jose.cook9279@demo.net,+1-857-792-1894,8165 Mission St,Apt 1725,Newark,NJ,43816,France,2004-09-10
+92,586-62-9991,ACTIVE,Hall,Joshua,C,M,1975-08-03,joshua.hall3478@demo.net,+1-355-841-1254,7005 Market St,,Atlanta,GA,87590,South Africa,2003-11-15
+93,836-82-4969,INACTIVE,Davis,Brian,X,M,1955-04-28,brian.davis822@mail.com,+1-574-992-3372,1391 2nd St,,Philadelphia,PA,12330,Canada,2004-07-18
+94,766-97-2305,INACTIVE,Young,Melissa,J,M,1979-11-09,melissa.young9833@brokerage.test,+1-369-698-1979,5191 Park St,Apt 1798,San Francisco,CA,17936,United States,2003-01-31
+95,588-59-8417,INACTIVE,Baker,Steven,Z,M,1960-03-26,steven.baker4791@brokerage.test,+1-486-262-6440,9935 Market St,Apt 2463,Austin,TX,92536,Spain,2005-05-05
+96,926-67-5641,ACTIVE,Martin,Amy,K,F,1987-07-08,amy.martin4392@brokerage.test,+1-632-361-1692,4737 Cedar St,Apt 2343,Boston,MA,88876,South Africa,2004-04-24
+97,916-58-4283,ACTIVE,Moore,Elizabeth,J,F,2001-09-22,elizabeth.moore6480@example.com,+1-676-925-4384,4183 Market St,Apt 1884,Newark,NJ,21149,Spain,2005-09-19
+98,365-76-6259,INACTIVE,Garcia,Andrew,Q,M,1984-06-25,andrew.garcia3100@mail.com,+1-417-396-2510,2970 2nd St,,Boston,MA,85968,United Kingdom,2005-12-03
+99,987-23-7089,INACTIVE,Thompson,Joshua,Z,M,1975-09-28,joshua.thompson2559@example.com,+1-523-811-1497,5661 Main St,,San Francisco,CA,74653,United Kingdom,2005-02-05
+100,367-45-7978,ACTIVE,Miller,Mary,O,U,1952-04-28,mary.miller4162@mail.com,+1-238-546-4293,2971 Sunset St,,Atlanta,GA,84341,Mexico,2004-03-13
+101,222-21-5213,INACTIVE,Williams,Patricia,S,U,1985-06-28,patricia.williams1472@mail.com,+1-885-718-7440,3002 Folsom St,Apt 1520,Philadelphia,PA,18412,Mexico,2005-03-24
+102,957-16-5225,INACTIVE,Campbell,Jessica,B,F,1964-03-02,jessica.campbell2373@example.com,+1-525-973-1094,3269 2nd St,,San Francisco,CA,82461,Spain,2003-02-26
+103,483-71-7220,ACTIVE,Carter,Donald,O,F,1991-02-16,donald.carter2346@mail.com,+1-893-212-8666,3206 Mission St,,Chicago,IL,61124,Spain,2003-09-12
+104,962-12-2231,INACTIVE,Anderson,Amy,K,F,1954-10-28,amy.anderson3832@brokerage.test,+1-688-318-6997,2349 3rd St,,Philadelphia,PA,22712,Canada,2005-02-27
+105,521-41-3550,ACTIVE,Lopez,Patricia,I,M,1995-08-18,patricia.lopez5481@brokerage.test,+1-371-466-9044,1799 3rd St,,Austin,TX,44917,Mexico,2005-05-06
+106,222-42-4303,INACTIVE,Davis,Steven,N,U,1959-09-02,steven.davis3911@brokerage.test,+1-443-299-7392,4751 Valencia St,Apt 236,Newark,NJ,72581,United Kingdom,2004-08-09
+107,243-66-1031,INACTIVE,Campbell,Amy,F,M,1968-03-21,amy.campbell7132@brokerage.test,+1-241-618-4576,4545 Maple St,,Newark,NJ,54683,Mexico,2005-11-12
+108,723-73-5487,ACTIVE,King,Barbara,G,M,1999-04-23,barbara.king3149@mail.com,+1-796-515-4314,174 Broad St,,Atlanta,GA,20389,United Kingdom,2003-06-29
+109,192-11-7709,INACTIVE,Clark,Kimberly,E,F,1996-01-17,kimberly.clark4069@brokerage.test,+1-390-776-7014,610 Maple St,,Chicago,IL,93778,Spain,2005-10-06
+110,831-41-6258,INACTIVE,Hill,Joshua,S,F,1950-06-17,joshua.hill4777@example.com,+1-310-948-9106,7324 Market St,,New York,NY,25829,Brazil,2004-12-31
+111,419-42-1492,ACTIVE,Rodriguez,Andrew,D,M,1951-04-03,andrew.rodriguez4284@mail.com,+1-218-813-8601,8577 Elm St,,Austin,TX,32004,Japan,2003-07-30
+112,699-74-5581,ACTIVE,Thompson,Michael,D,M,1956-12-06,michael.thompson6647@example.com,+1-340-754-4726,3729 Cedar St,,New York,NY,70928,France,2005-10-07
+113,137-60-1851,INACTIVE,Mitchell,Sandra,K,M,1975-03-27,sandra.mitchell3939@demo.net,+1-543-932-8136,9257 3rd St,Apt 2299,Boston,MA,88255,South Africa,2005-12-12
+114,473-23-9696,ACTIVE,Lee,Patricia,C,F,1983-03-22,patricia.lee7095@brokerage.test,+1-405-716-1341,3704 Cedar St,,Boston,MA,96916,United Kingdom,2003-01-24
+115,743-79-1586,ACTIVE,Roberts,Betty,I,M,1979-11-02,betty.roberts8525@example.com,+1-213-644-4877,655 2nd St,,Atlanta,GA,44835,United States,2004-07-13
+116,704-78-3431,INACTIVE,Adams,Matthew,D,U,1960-02-02,matthew.adams4811@mail.com,+1-616-791-5723,4501 Elm St,,Chicago,IL,21072,Brazil,2005-08-13
+117,306-80-7009,INACTIVE,Wright,Deborah,R,U,1968-08-20,deborah.wright7830@brokerage.test,+1-680-517-1507,3979 3rd St,,Miami,FL,95243,Japan,2005-03-02
+118,670-51-9051,INACTIVE,Wright,Paul,J,M,1974-10-13,paul.wright4842@mail.com,+1-258-990-1356,2607 Broad St,,Austin,TX,41266,Spain,2004-10-25
+119,330-96-3531,INACTIVE,Lewis,Matthew,K,F,1992-01-17,matthew.lewis2300@brokerage.test,+1-891-407-5534,8493 Pine St,,Seattle,WA,24318,Mexico,2005-12-02
+120,520-80-2924,INACTIVE,Cook,Deborah,M,U,1998-08-09,deborah.cook6848@mail.com,+1-486-836-2819,6228 Folsom St,,Boston,MA,23547,Canada,2003-01-09
