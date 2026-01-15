@@ -1,5 +1,7 @@
 FROM ghcr.io/astral-sh/uv:python3.13-bookworm
 
+ENV UV_HTTP_TIMEOUT=300
+
 RUN adduser agent
 USER agent
 WORKDIR /home/agent

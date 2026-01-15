@@ -196,203 +196,96 @@ async def test_message(agent, streaming):
     assert events, "Agent should respond with at least one event"
     assert not all_errors, f"Message validation failed:\n" + "\n".join(all_errors)
 
-# Custom tests for Schema Merging Benchmark
+# Custom tests for TPC-DI Data Integration Benchmark
 
 import sys
 import os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src'))
 
-from agent import Agent
+from agent import Agent, EvalRequest
+from pydantic import HttpUrl
 
 
-class TestTestCaseGeneration:
-    """Test that test cases are generated correctly."""
-
-    def setup_method(self):
-        self.agent = Agent()
-
-    def test_easy_case_structure(self):
-        """Easy case should have 2 tables with proper structure."""
-        case = self.agent.generate_test_case("easy")
-        
-        assert "tables" in case
-        assert "ground_truth" in case
-        assert len(case["tables"]) == 2
-        
-        for table in case["tables"]:
-            assert "name" in table
-            assert "columns" in table
-            assert "sample_data" in table
-
-    def test_medium_case_structure(self):
-        """Medium case should have 3 tables."""
-        case = self.agent.generate_test_case("medium")
-        assert len(case["tables"]) == 3
-
-    def test_hard_case_structure(self):
-        """Hard case should have 5 tables."""
-        case = self.agent.generate_test_case("hard")
-        assert len(case["tables"]) == 5
-
-    def test_ground_truth_has_all_fields(self):
-        """Ground truth should have all required fields."""
-        for difficulty in ["easy", "medium", "hard"]:
-            case = self.agent.generate_test_case(difficulty)
-            gt = case["ground_truth"]
-            
-            assert "primary_keys" in gt
-            assert "join_columns" in gt
-            assert "inconsistencies" in gt
-            assert "merged_schema" in gt
-
-
-class TestPrimaryKeyScoring:
-    """Test primary key identification scoring."""
+class TestEvalRequestValidation:
+    """Test A2A request validation."""
 
     def setup_method(self):
         self.agent = Agent()
 
-    def test_perfect_score(self):
-        """All keys correct should score 25."""
-        expected = {"customers": "cust_id", "orders": "order_id"}
-        response = {"customers": "cust_id", "orders": "order_id"}
-        
-        score, detail = self.agent._score_primary_keys(response, expected)
-        assert score == 25
-        assert "2/2" in detail
+    def test_valid_request_passes(self):
+        """Valid request with required role should pass validation."""
+        request = EvalRequest(
+            participants={"data_integrator": HttpUrl("http://127.0.0.1:9010")},
+            config={"timeout": 300}
+        )
+        ok, msg = self.agent.validate_request(request)
+        assert ok is True
+        assert msg == "ok"
 
-    def test_partial_score(self):
-        """One correct out of two should score ~12."""
-        expected = {"customers": "cust_id", "orders": "order_id"}
-        response = {"customers": "cust_id", "orders": "wrong_id"}
-        
-        score, detail = self.agent._score_primary_keys(response, expected)
-        assert score == 12
-        assert "1/2" in detail
+    def test_missing_role_fails(self):
+        """Request missing required role should fail validation."""
+        request = EvalRequest(
+            participants={"wrong_role": HttpUrl("http://127.0.0.1:9010")},
+            config={}
+        )
+        ok, msg = self.agent.validate_request(request)
+        assert ok is False
+        assert "data_integrator" in msg
 
-    def test_zero_score_empty(self):
-        """Empty response should score 0."""
-        expected = {"customers": "cust_id"}
-        response = {}
-        
-        score, detail = self.agent._score_primary_keys(response, expected)
-        assert score == 0
-
-    def test_case_insensitive(self):
-        """Scoring should be case-insensitive."""
-        expected = {"customers": "cust_id"}
-        response = {"customers": "CUST_ID"}
-        
-        score, _ = self.agent._score_primary_keys(response, expected)
-        assert score == 25
+    def test_required_roles_attribute(self):
+        """Agent should have required_roles defined."""
+        assert hasattr(self.agent, 'required_roles')
+        assert "data_integrator" in self.agent.required_roles
 
 
-class TestJoinColumnScoring:
-    """Test join column identification scoring."""
+class TestEvaluationScoring:
+    """Test submission evaluation scoring."""
 
     def setup_method(self):
         self.agent = Agent()
 
-    def test_perfect_score(self):
-        """Correct join columns should score 25."""
-        expected = [["customers.cust_id", "orders.customer_ID"]]
-        response = [["customers.cust_id", "orders.customer_ID"]]
-        
-        score, detail = self.agent._score_join_columns(response, expected)
-        assert score == 25
+    def test_evaluate_perfect_submission(self):
+        """Perfect submission should score 100."""
+        import pandas as pd
+        # Use ground truth as submission for perfect score
+        ground_truth = self.agent.ground_truth
+        score, details = self.agent.evaluate_submission(ground_truth)
+        assert score == 100
+        assert details["columns"]["score"] == 20
+        assert details["row_count"]["score"] == 10
+        assert details["customer_coverage"]["score"] == 15
 
-    def test_reversed_order_still_matches(self):
-        """Order within pair shouldn't matter."""
-        expected = [["customers.cust_id", "orders.customer_ID"]]
-        response = [["orders.customer_ID", "customers.cust_id"]]
-        
-        score, _ = self.agent._score_join_columns(response, expected)
-        assert score == 25
+    def test_evaluate_empty_submission(self):
+        """Empty submission should score low."""
+        import pandas as pd
+        empty_df = pd.DataFrame({"customer_id": []})
+        score, details = self.agent.evaluate_submission(empty_df)
+        assert score < 50
 
-    def test_zero_score_empty(self):
-        """Empty response should score 0."""
-        expected = [["a.col", "b.col"]]
-        response = []
-        
-        score, detail = self.agent._score_join_columns(response, expected)
-        assert score == 0
-
-
-class TestMergedSchemaScoring:
-    """Test merged schema scoring."""
-
-    def setup_method(self):
-        self.agent = Agent()
-
-    def test_perfect_coverage(self):
-        """All columns present should score 25."""
-        expected = {"merged": ["col1", "col2", "col3"]}
-        response = {"output": ["col1", "col2", "col3"]}
-        
-        score, _ = self.agent._score_merged_schema(response, expected)
-        assert score == 25
-
-    def test_partial_coverage(self):
-        """Partial column coverage should score proportionally."""
-        expected = {"merged": ["col1", "col2", "col3", "col4"]}
-        response = {"output": ["col1", "col2"]}
-        
-        score, detail = self.agent._score_merged_schema(response, expected)
-        assert score == 12  # 2/4 = 50% of 25
-        assert "2/4" in detail
-
-    def test_empty_response(self):
-        """Empty response should score 0."""
-        expected = {"merged": ["col1"]}
-        response = {}
-        
-        score, _ = self.agent._score_merged_schema(response, expected)
-        assert score == 0
+    def test_evaluate_missing_columns(self):
+        """Submission with missing columns should lose points."""
+        import pandas as pd
+        partial_df = pd.DataFrame({
+            "customer_id": [1, 2],
+            "customer_name": ["Test 1", "Test 2"]
+        })
+        score, details = self.agent.evaluate_submission(partial_df)
+        assert details["columns"]["missing"]
+        assert details["columns"]["score"] < 20
 
 
-class TestInconsistencyScoring:
-    """Test inconsistency detection scoring."""
+class TestAgentInitialization:
+    """Test Agent initialization."""
 
-    def setup_method(self):
-        self.agent = Agent()
+    def test_messenger_initialized(self):
+        """Agent should have messenger attribute."""
+        agent = Agent()
+        assert hasattr(agent, 'messenger')
+        assert agent.messenger is not None
 
-    def test_keywords_detected(self):
-        """Response with relevant keywords should score points."""
-        expected = ["cust_id vs customer_ID (case)"]
-        response = ["The column naming uses different case conventions: cust_id and customer_ID"]
-        
-        score, _ = self.agent._score_inconsistencies(response, expected)
-        assert score > 0
-
-    def test_empty_response(self):
-        """Empty response should score 0."""
-        expected = ["some inconsistency"]
-        response = []
-        
-        score, _ = self.agent._score_inconsistencies(response, expected)
-        assert score == 0
-
-
-class TestJsonExtraction:
-    """Test JSON extraction from markdown responses."""
-
-    def setup_method(self):
-        self.agent = Agent()
-
-    def test_extract_from_markdown(self):
-        """Should extract JSON from markdown code block."""
-        text = '```json\n{"key": "value"}\n```'
-        result = self.agent._extract_json(text)
-        assert result == {"key": "value"}
-
-    def test_extract_raw_json(self):
-        """Should extract raw JSON object."""
-        text = 'Here is the result: {"key": "value"} and more text'
-        result = self.agent._extract_json(text)
-        assert result == {"key": "value"}
-
-    def test_returns_none_for_invalid(self):
-        """Should return None for text without JSON."""
-        text = "No JSON here"
-        result = self.agent._extract_json(text)
-        assert result is None
+    def test_ground_truth_loading(self):
+        """Agent should load ground truth file."""
+        agent = Agent()
+        gt = agent.ground_truth
+        assert len(gt) > 0
+        assert "customer_id" in gt.columns

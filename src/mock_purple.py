@@ -1,8 +1,8 @@
 """
 Mock Purple Agent for TPC-DI Data Integration Benchmark.
 
-This agent fetches files from the MCP server, merges them using pandas,
-and returns the aggregated customer data.
+This agent fetches files via HTTP from the green agent's file server,
+merges them using pandas, and returns the aggregated customer data.
 
 Run with: python src/mock_purple.py --port 9010
 """
@@ -10,8 +10,10 @@ Run with: python src/mock_purple.py --port 9010
 import argparse
 import json
 import os
+import re
 from io import StringIO
 
+import httpx
 import pandas as pd
 import uvicorn
 from dotenv import load_dotenv
@@ -42,11 +44,35 @@ class DataIntegrationAgent:
     """
     Purple Agent that performs TPC-DI data integration.
     
-    Fetches source files, joins them, and computes customer aggregations.
+    Fetches source files via HTTP, joins them, and computes customer aggregations.
     """
 
     def __init__(self):
-        self.mcp_url = os.getenv("MCP_SERVER_URL", "http://localhost:9009/mcp")
+        self.default_file_server = os.getenv("FILE_SERVER_URL", "http://localhost:9009")
+
+    def extract_file_urls(self, message_text: str) -> dict[str, str]:
+        """Extract file URLs from the task message."""
+        urls = {}
+        
+        # Look for URLs in the message
+        url_pattern = r'(https?://[^\s]+\.csv)'
+        matches = re.findall(url_pattern, message_text)
+        
+        for url in matches:
+            if "customers" in url.lower():
+                urls["customers"] = url
+            elif "accounts" in url.lower():
+                urls["accounts"] = url
+            elif "trades" in url.lower():
+                urls["trades"] = url
+        
+        return urls
+
+    async def fetch_csv(self, url: str, client: httpx.AsyncClient) -> pd.DataFrame:
+        """Fetch a CSV file from a URL and return as DataFrame."""
+        response = await client.get(url)
+        response.raise_for_status()
+        return pd.read_csv(StringIO(response.text))
 
     async def run(self, message_text: str, updater: TaskUpdater) -> None:
         """Process the data integration task."""
@@ -55,31 +81,50 @@ class DataIntegrationAgent:
             new_agent_text_message("Starting data integration task...")
         )
 
-        try:
-            request = json.loads(message_text)
-            mcp_url = request.get("mcp_server_url", self.mcp_url)
-        except json.JSONDecodeError:
-            mcp_url = self.mcp_url
+        # Extract file URLs from task message
+        file_urls = self.extract_file_urls(message_text)
+        
+        if not all(key in file_urls for key in ["customers", "accounts", "trades"]):
+            # Fall back to default file server
+            await updater.update_status(
+                TaskState.working,
+                new_agent_text_message(f"Using default file server: {self.default_file_server}")
+            )
+            file_urls = {
+                "customers": f"{self.default_file_server}/files/customers_tpcdi_lite_v3.csv",
+                "accounts": f"{self.default_file_server}/files/accounts_tpcdi_lite_v3.csv",
+                "trades": f"{self.default_file_server}/files/trades_tpcdi_lite_v3.csv",
+            }
 
         await updater.update_status(
             TaskState.working,
-            new_agent_text_message(f"Fetching files from MCP server...")
+            new_agent_text_message(f"Fetching files via HTTP...")
         )
 
         try:
-            # For this mock, we'll read files directly from disk
-            # In a real scenario, you'd use the MCP client to fetch files
-            from pathlib import Path
-            tasks_dir = Path(__file__).parent.parent / "jan15_tasks"
-
-            # Load source files
-            customers_df = pd.read_csv(tasks_dir / "customers_tpcdi_lite_v3.csv")
-            accounts_df = pd.read_csv(tasks_dir / "accounts_tpcdi_lite_v3.csv")
-            trades_df = pd.read_csv(tasks_dir / "trades_tpcdi_lite_v3.csv")
+            async with httpx.AsyncClient(timeout=60) as client:
+                # Fetch all CSV files
+                await updater.update_status(
+                    TaskState.working,
+                    new_agent_text_message(f"Downloading customers file...")
+                )
+                customers_df = await self.fetch_csv(file_urls["customers"], client)
+                
+                await updater.update_status(
+                    TaskState.working,
+                    new_agent_text_message(f"Downloading accounts file...")
+                )
+                accounts_df = await self.fetch_csv(file_urls["accounts"], client)
+                
+                await updater.update_status(
+                    TaskState.working,
+                    new_agent_text_message(f"Downloading trades file...")
+                )
+                trades_df = await self.fetch_csv(file_urls["trades"], client)
 
             await updater.update_status(
                 TaskState.working,
-                new_agent_text_message("Merging and aggregating data...")
+                new_agent_text_message(f"Merging and aggregating data...")
             )
 
             # Perform the data integration
@@ -98,6 +143,11 @@ class DataIntegrationAgent:
                 name="Integration Result",
             )
 
+        except httpx.HTTPError as e:
+            await updater.add_artifact(
+                parts=[Part(root=TextPart(text=f"Error fetching files: {str(e)}"))],
+                name="Error",
+            )
         except Exception as e:
             await updater.add_artifact(
                 parts=[Part(root=TextPart(text=f"Error during integration: {str(e)}"))],
