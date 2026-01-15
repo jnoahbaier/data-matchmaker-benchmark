@@ -1,23 +1,197 @@
+"""
+Green Agent for TPC-DI Data Integration Benchmark.
+
+Evaluates Purple Agents on their ability to merge/join source data files
+and produce correct aggregated customer-centric results.
+
+Uses a hybrid evaluation approach:
+1. Deterministic numerical scoring for accuracy metrics
+2. LLM-powered qualitative feedback for insights and explanations
+"""
+
 import json
 import logging
-import random
+import os
 import re
+from io import StringIO
+from pathlib import Path
+from typing import Optional
+
+from dotenv import load_dotenv
+from google import genai
+from google.genai import types
+import pandas as pd
 from a2a.server.tasks import TaskUpdater
-from a2a.types import Message, TaskState, Part, TextPart, DataPart
+from a2a.types import DataPart, Message, Part, TaskState, TextPart
 from a2a.utils import get_message_text, new_agent_text_message
 
 from messenger import Messenger
 
+# Load environment variables from .env file
+load_dotenv()
+
 # Configure logging
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-logger = logging.getLogger("SchemaEvaluator")
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger("DataIntegrationEvaluator")
+
+# Get Gemini API key
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+if GEMINI_API_KEY:
+    logger.info("Gemini API key loaded successfully")
+else:
+    logger.warning("GEMINI_API_KEY not set - LLM feedback will be disabled")
+
+# Paths
+TASKS_DIR = Path(__file__).parent.parent / "jan15_tasks"
+GROUND_TRUTH_FILE = TASKS_DIR / "gold_ground_truth_tpcdi_lite_v3.csv"
 
 
 class Agent:
-    """Green Agent that evaluates Purple Agents on schema merging tasks."""
+    """Green Agent that evaluates Purple Agents on TPC-DI data integration tasks.
+    
+    Uses hybrid evaluation:
+    - Deterministic numerical scoring for accuracy
+    - LLM-powered feedback for qualitative insights
+    """
 
     def __init__(self):
         self.messenger = Messenger()
+        self._ground_truth_df: Optional[pd.DataFrame] = None
+        
+        # Initialize Gemini client for LLM feedback
+        self._genai_client = None
+        if GEMINI_API_KEY:
+            try:
+                self._genai_client = genai.Client(api_key=GEMINI_API_KEY)
+                logger.info("Gemini client initialized successfully")
+            except Exception as e:
+                logger.warning(f"Failed to initialize Gemini client: {e}")
+
+    @property
+    def ground_truth(self) -> pd.DataFrame:
+        """Load and cache ground truth data."""
+        if self._ground_truth_df is None:
+            if not GROUND_TRUTH_FILE.exists():
+                raise FileNotFoundError(f"Ground truth file not found: {GROUND_TRUTH_FILE}")
+            self._ground_truth_df = pd.read_csv(GROUND_TRUTH_FILE)
+            logger.info(f"Loaded ground truth: {len(self._ground_truth_df)} rows")
+        return self._ground_truth_df
+
+    async def generate_llm_feedback(
+        self,
+        submitted_df: pd.DataFrame,
+        score: int,
+        details: dict,
+    ) -> dict:
+        """
+        Generate qualitative LLM feedback on the submission.
+        
+        This adds an intelligent analysis layer on top of the numerical scoring,
+        explaining what the Purple Agent did well or poorly.
+        
+        Returns a dict with 'summary', 'strengths', 'weaknesses', and 'recommendations'.
+        """
+        if not self._genai_client:
+            return {
+                "enabled": False,
+                "message": "LLM feedback disabled - GEMINI_API_KEY not configured"
+            }
+        
+        try:
+            # Prepare evaluation summary for the LLM
+            ground_truth = self.ground_truth
+            
+            # Sample data for context (don't send entire dataset)
+            gt_sample = ground_truth.head(3).to_string()
+            sub_sample = submitted_df.head(3).to_string() if len(submitted_df) > 0 else "No data submitted"
+            
+            # Build prompt
+            prompt = f"""You are an expert evaluator for a data integration benchmark competition.
+
+## Task Context
+Purple Agents are evaluated on their ability to:
+1. Fetch data from multiple source files (customers, accounts, trades)
+2. Join the tables correctly on customer_id and account_id
+3. Filter to completed trades only (trade_status = 'CMPT')
+4. Compute per-customer aggregations accurately
+
+## Numerical Evaluation Results
+- **Overall Score**: {score}/100
+- **Column Check** ({details.get('columns', {}).get('score', 'N/A')}/20): 
+  - Missing columns: {details.get('columns', {}).get('missing', [])}
+  - Extra columns: {details.get('columns', {}).get('extra', [])}
+- **Row Count** ({details.get('row_count', {}).get('score', 'N/A')}/10):
+  - Expected: {details.get('row_count', {}).get('expected', 'N/A')} rows
+  - Submitted: {details.get('row_count', {}).get('submitted', 'N/A')} rows
+- **Customer Coverage** ({details.get('customer_coverage', {}).get('score', 'N/A')}/15):
+  - Coverage: {details.get('customer_coverage', {}).get('coverage_pct', 'N/A')}%
+- **Numeric Accuracy** ({details.get('numeric_accuracy', {}).get('score', 'N/A')}/40):
+  {json.dumps(details.get('numeric_accuracy', {}).get('columns', {}), indent=2)}
+- **String Accuracy** ({details.get('string_accuracy', {}).get('score', 'N/A')}/15):
+  {json.dumps(details.get('string_accuracy', {}).get('fields', {}), indent=2)}
+
+## Sample Ground Truth Data
+{gt_sample}
+
+## Sample Submitted Data
+{sub_sample}
+
+## Your Task
+Provide a concise qualitative evaluation with:
+1. **Summary** (2-3 sentences): Overall assessment of the submission quality
+2. **Strengths** (bullet points): What the Purple Agent did well
+3. **Weaknesses** (bullet points): Key issues or errors
+4. **Recommendations** (bullet points): Specific improvements for the Purple Agent
+
+Be constructive and specific. Focus on data integration quality, not generic feedback.
+Respond in JSON format with keys: summary, strengths, weaknesses, recommendations."""
+
+            # Call Gemini API using new google.genai SDK
+            logger.info("Generating LLM feedback via Gemini...")
+            response = await self._genai_client.aio.models.generate_content(
+                model="gemini-2.0-flash",
+                contents=prompt,
+                config=types.GenerateContentConfig(
+                    temperature=0.3,
+                    max_output_tokens=1024,
+                    response_mime_type="application/json",
+                ),
+            )
+            
+            # Parse response
+            response_text = response.text.strip()
+            
+            # Handle potential markdown code blocks
+            if response_text.startswith("```"):
+                response_text = re.sub(r'^```(?:json)?\s*', '', response_text)
+                response_text = re.sub(r'\s*```$', '', response_text)
+            
+            feedback = json.loads(response_text)
+            feedback["enabled"] = True
+            feedback["model"] = "gemini-2.0-flash"
+            
+            logger.info("LLM feedback generated successfully")
+            return feedback
+            
+        except json.JSONDecodeError as e:
+            logger.warning(f"Failed to parse LLM response as JSON: {e}")
+            # Return raw text if JSON parsing fails
+            return {
+                "enabled": True,
+                "model": "gemini-2.0-flash",
+                "summary": response_text if 'response_text' in dir() else "Failed to generate feedback",
+                "parse_error": str(e),
+            }
+        except Exception as e:
+            logger.error(f"LLM feedback generation failed: {e}")
+            return {
+                "enabled": False,
+                "error": str(e),
+                "message": "LLM feedback generation failed - falling back to numerical evaluation only"
+            }
 
     async def run(self, message: Message, updater: TaskUpdater) -> None:
         """Main entry point for assessment requests."""
@@ -27,579 +201,560 @@ class Agent:
         try:
             request = json.loads(input_text)
         except json.JSONDecodeError:
+            # Check if this is a plain text submission (CSV data)
+            if self._looks_like_csv(input_text):
+                await self._evaluate_csv_submission(input_text, updater)
+                return
+            
             logger.error("Failed to parse request as JSON")
             await updater.add_artifact(
-                parts=[Part(root=TextPart(text="Error: Expected JSON with 'participants' and optional 'config'"))],
+                parts=[Part(root=TextPart(text=(
+                    "Error: Expected JSON request or CSV data submission.\n\n"
+                    "For task request, send JSON with:\n"
+                    "  {'participants': {'data_integrator': '<purple_agent_url>'}, 'config': {}}\n\n"
+                    "Or submit CSV data directly for evaluation."
+                )))],
                 name="Error",
             )
             return
 
+        # Handle different request types
+        action = request.get("action", "evaluate")
+        
+        if action == "get_task":
+            await self._handle_get_task(request, updater)
+        elif action == "submit_result":
+            await self._handle_submit_result(request, updater)
+        elif action == "evaluate":
+            await self._handle_evaluate_agent(request, updater)
+        else:
+            await updater.add_artifact(
+                parts=[Part(root=TextPart(text=f"Unknown action: {action}"))],
+                name="Error",
+            )
+
+    async def _handle_get_task(self, request: dict, updater: TaskUpdater) -> None:
+        """Handle request to get the benchmark task information."""
+        mcp_url = os.getenv("MCP_SERVER_URL", "http://localhost:9009/mcp")
+        
+        task_info = {
+            "task_name": "TPC-DI Data Integration Benchmark",
+            "mcp_server_url": mcp_url,
+            "instructions": """
+Merge and aggregate data from the following source files to produce a customer-centric summary.
+
+## Source Files (fetch from MCP server):
+1. customers_tpcdi_lite_v3.csv - Customer demographics
+2. accounts_tpcdi_lite_v3.csv - Account information (links to customers via customer_id)
+3. trades_tpcdi_lite_v3.csv - Trade transactions (links to accounts via account_id)
+4. prospect_tpcdi_lite_v3.xlsx - Prospect data (optional)
+5. finwire_tpcdi_lite_v3.xml - Financial wire data (optional)
+
+## Task:
+Join the tables and compute per-customer aggregations:
+- customer_id: The customer identifier
+- customer_name: First name + " " + Last name
+- country: Customer's country
+- num_accounts: Count of accounts per customer
+- total_balance: Sum of account balances
+- num_trades: Count of COMPLETED trades (trade_status = 'CMPT')
+- total_trade_volume: Sum of trade quantities for completed trades
+- total_trade_value: Sum of (quantity * trade_price) for completed trades
+- symbols_traded: Comma-separated unique stock symbols traded
+
+## MCP Resources:
+- Use 'get_task_info' tool for detailed schema
+- Use 'list_files' tool to see available files
+- Use 'get_file_content' tool to fetch file contents
+
+## Submission:
+Send your result as JSON with action='submit_result' and 'data' containing CSV string or list of records.
+""",
+            "expected_columns": [
+                "customer_id", "customer_name", "country", "num_accounts",
+                "total_balance", "num_trades", "total_trade_volume",
+                "total_trade_value", "symbols_traded"
+            ]
+        }
+        
+        await updater.add_artifact(
+            parts=[Part(root=DataPart(data=task_info))],
+            name="Task Information",
+        )
+
+    async def _handle_submit_result(self, request: dict, updater: TaskUpdater) -> None:
+        """Handle submission of integration results for evaluation."""
+        data = request.get("data")
+        
+        if not data:
+            await updater.add_artifact(
+                parts=[Part(root=TextPart(text="Error: No 'data' field in submission"))],
+                name="Error",
+            )
+            return
+        
+        try:
+            # Parse submitted data
+            if isinstance(data, str):
+                # CSV string
+                submitted_df = pd.read_csv(StringIO(data))
+            elif isinstance(data, list):
+                # List of records
+                submitted_df = pd.DataFrame(data)
+            elif isinstance(data, dict):
+                # Single record or column-oriented dict
+                if all(isinstance(v, list) for v in data.values()):
+                    submitted_df = pd.DataFrame(data)
+                else:
+                    submitted_df = pd.DataFrame([data])
+            else:
+                await updater.add_artifact(
+                    parts=[Part(root=TextPart(text=f"Error: Invalid data format: {type(data)}"))],
+                    name="Error",
+                )
+                return
+            
+            # Step 1: Deterministic numerical evaluation
+            score, details = self.evaluate_submission(submitted_df)
+            
+            # Step 2: LLM-powered qualitative feedback
+            llm_feedback = await self.generate_llm_feedback(submitted_df, score, details)
+            
+            result = {
+                "score": score,
+                "max_score": 100,
+                "details": details,
+                "llm_feedback": llm_feedback,
+                "submitted_rows": len(submitted_df),
+                "expected_rows": len(self.ground_truth),
+            }
+            
+            await updater.add_artifact(
+                parts=[Part(root=DataPart(data=result))],
+                name="Evaluation Result",
+            )
+            
+        except Exception as e:
+            logger.error(f"Error evaluating submission: {e}")
+            await updater.add_artifact(
+                parts=[Part(root=TextPart(text=f"Error evaluating submission: {e}"))],
+                name="Error",
+            )
+
+    async def _handle_evaluate_agent(self, request: dict, updater: TaskUpdater) -> None:
+        """Handle full evaluation flow with a Purple Agent."""
         participants = request.get("participants", {})
         config = request.get("config", {})
-        difficulty = config.get("difficulty", "easy")
-
-        purple_url = participants.get("schema_merger") or participants.get("merger")
-        logger.info(f"Assessment config: difficulty={difficulty}, purple_url={purple_url}")
+        
+        purple_url = (
+            participants.get("data_integrator") or 
+            participants.get("purple") or
+            participants.get("agent")
+        )
+        
         if not purple_url:
-            logger.error("No purple agent URL provided")
-            await updater.add_artifact(
-                parts=[Part(root=TextPart(text="Error: No 'schema_merger' or 'merger' participant provided"))],
-                name="Error",
-            )
+            # No purple agent specified, return task info
+            await self._handle_get_task(request, updater)
             return
-
+        
+        logger.info(f"Evaluating Purple Agent at: {purple_url}")
+        
         await updater.update_status(
-            TaskState.working, new_agent_text_message("Generating test case...")
+            TaskState.working,
+            new_agent_text_message("Sending task to Purple Agent...")
         )
-
-        test_case = self.generate_test_case(difficulty)
-
-        await updater.update_status(
-            TaskState.working, new_agent_text_message(f"Sending task to purple agent at {purple_url}...")
-        )
-
+        
+        # Get MCP URL
+        mcp_url = os.getenv("MCP_SERVER_URL", "http://localhost:9009/mcp")
+        
+        # Send task to Purple Agent
         task_message = json.dumps({
-            "tables": test_case["tables"],
-            "task": (
-                "Analyze these tables and return JSON with:\n"
-                "1. primary_keys: {table_name: column_name}\n"
-                "2. join_columns: [[table1.col, table2.col], ...]\n"
-                "3. inconsistencies: [list of naming inconsistencies found]\n"
-                "4. merged_schema: {unified_table_name: [columns]}"
-            )
+            "action": "data_integration",
+            "mcp_server_url": mcp_url,
+            "task": """
+Perform TPC-DI data integration:
+1. Connect to the MCP server at the provided URL
+2. Fetch source files: customers_tpcdi_lite_v3.csv, accounts_tpcdi_lite_v3.csv, trades_tpcdi_lite_v3.csv
+3. Join tables: accounts.customer_id -> customers.customer_id, trades.account_id -> accounts.account_id
+4. Filter to completed trades only (trade_status = 'CMPT')
+5. Aggregate per customer:
+   - customer_name = first_name + " " + last_name
+   - country
+   - num_accounts = count of accounts
+   - total_balance = sum of account balances
+   - num_trades = count of completed trades
+   - total_trade_volume = sum of trade quantities
+   - total_trade_value = sum of (quantity * trade_price)
+   - symbols_traded = comma-separated unique symbols
+6. Return result as CSV string
+""",
+            "expected_columns": [
+                "customer_id", "customer_name", "country", "num_accounts",
+                "total_balance", "num_trades", "total_trade_volume",
+                "total_trade_value", "symbols_traded"
+            ]
         })
-
+        
         try:
+            timeout = config.get("timeout", 300)
             response_text = await self.messenger.talk_to_agent(
                 message=task_message,
                 url=purple_url,
                 new_conversation=True,
-                timeout=120
+                timeout=timeout
             )
         except Exception as e:
+            logger.error(f"Error communicating with Purple Agent: {e}")
             await updater.add_artifact(
-                parts=[Part(root=TextPart(text=f"Error communicating with purple agent: {e}"))],
+                parts=[Part(root=TextPart(text=f"Error communicating with Purple Agent: {e}"))],
                 name="Error",
             )
             return
-
+        
         await updater.update_status(
-            TaskState.working, new_agent_text_message("Evaluating response...")
+            TaskState.working,
+            new_agent_text_message("Evaluating response...")
         )
-
+        
+        # Parse and evaluate response
         try:
             response = json.loads(response_text)
+            data = response.get("data") or response.get("result") or response.get("csv")
         except json.JSONDecodeError:
-            response = self._extract_json(response_text)
-            if response is None:
-                response = {}
-
-        score, details = self.evaluate_response(response, test_case["ground_truth"])
-        logger.info(f"Evaluation complete: score={score}/100")
-
-        result = {
-            "score": score,
-            "max_score": 100,
-            "difficulty": difficulty,
-            "details": details,
-            "test_case": {
-                "tables": [t["name"] for t in test_case["tables"]],
-                "ground_truth": test_case["ground_truth"]
-            },
-            "purple_response": response
-        }
-
-        await updater.add_artifact(
-            parts=[Part(root=DataPart(data=result))],
-            name="Evaluation Result",
-        )
-
-    def generate_test_case(self, difficulty: str = "easy", seed: int = None) -> dict:
-        """Generate a test case with tables and ground truth.
+            # Try to extract CSV directly
+            data = self._extract_csv(response_text)
         
-        Args:
-            difficulty: One of 'easy', 'medium', 'hard'
-            seed: Optional random seed for reproducibility
+        if not data:
+            await updater.add_artifact(
+                parts=[Part(root=TextPart(text="Error: Could not extract data from Purple Agent response"))],
+                name="Error",
+            )
+            return
+        
+        # Evaluate
+        try:
+            if isinstance(data, str):
+                submitted_df = pd.read_csv(StringIO(data))
+            elif isinstance(data, list):
+                submitted_df = pd.DataFrame(data)
+            else:
+                submitted_df = pd.DataFrame(data)
+            
+            # Step 1: Deterministic numerical evaluation
+            score, details = self.evaluate_submission(submitted_df)
+            
+            # Step 2: LLM-powered qualitative feedback
+            await updater.update_status(
+                TaskState.working,
+                new_agent_text_message("Generating AI-powered feedback...")
+            )
+            llm_feedback = await self.generate_llm_feedback(submitted_df, score, details)
+            
+            result = {
+                "score": score,
+                "max_score": 100,
+                "details": details,
+                "llm_feedback": llm_feedback,
+                "purple_agent_url": purple_url,
+                "submitted_rows": len(submitted_df),
+                "expected_rows": len(self.ground_truth),
+            }
+            
+            await updater.add_artifact(
+                parts=[Part(root=DataPart(data=result))],
+                name="Evaluation Result",
+            )
+            
+        except Exception as e:
+            logger.error(f"Error evaluating Purple Agent response: {e}")
+            await updater.add_artifact(
+                parts=[Part(root=TextPart(text=f"Error evaluating response: {e}"))],
+                name="Error",
+            )
+
+    async def _evaluate_csv_submission(self, csv_text: str, updater: TaskUpdater) -> None:
+        """Evaluate a direct CSV submission."""
+        try:
+            submitted_df = pd.read_csv(StringIO(csv_text))
+            
+            # Step 1: Deterministic numerical evaluation
+            score, details = self.evaluate_submission(submitted_df)
+            
+            # Step 2: LLM-powered qualitative feedback
+            llm_feedback = await self.generate_llm_feedback(submitted_df, score, details)
+            
+            result = {
+                "score": score,
+                "max_score": 100,
+                "details": details,
+                "llm_feedback": llm_feedback,
+                "submitted_rows": len(submitted_df),
+                "expected_rows": len(self.ground_truth),
+            }
+            
+            await updater.add_artifact(
+                parts=[Part(root=DataPart(data=result))],
+                name="Evaluation Result",
+            )
+        except Exception as e:
+            await updater.add_artifact(
+                parts=[Part(root=TextPart(text=f"Error parsing CSV: {e}"))],
+                name="Error",
+            )
+
+    def evaluate_submission(self, submitted: pd.DataFrame) -> tuple[int, dict]:
         """
-        if seed is not None:
-            random.seed(seed)
+        Evaluate submitted data against ground truth.
         
-        if difficulty == "easy":
-            cases = [self._generate_easy_case, self._generate_easy_case_variant]
-        elif difficulty == "medium":
-            cases = [self._generate_medium_case, self._generate_medium_case_variant]
-        else:
-            cases = [self._generate_hard_case, self._generate_hard_case_variant]
-        
-        selected = random.choice(cases)
-        logger.info(f"Generated test case: {selected.__name__}")
-        return selected()
-
-    def _generate_easy_case(self) -> dict:
-        """Two tables with obvious keys and one naming inconsistency."""
-        return {
-            "tables": [
-                {
-                    "name": "customers",
-                    "columns": ["cust_id", "customer_name", "email"],
-                    "sample_data": [
-                        {"cust_id": 1, "customer_name": "Alice", "email": "alice@example.com"},
-                        {"cust_id": 2, "customer_name": "Bob", "email": "bob@example.com"}
-                    ]
-                },
-                {
-                    "name": "orders",
-                    "columns": ["order_id", "customer_ID", "amount", "order_date"],
-                    "sample_data": [
-                        {"order_id": 101, "customer_ID": 1, "amount": 99.99, "order_date": "2024-01-15"},
-                        {"order_id": 102, "customer_ID": 2, "amount": 149.50, "order_date": "2024-01-16"}
-                    ]
-                }
-            ],
-            "ground_truth": {
-                "primary_keys": {"customers": "cust_id", "orders": "order_id"},
-                "join_columns": [["customers.cust_id", "orders.customer_ID"]],
-                "inconsistencies": ["cust_id vs customer_ID (case and naming)"],
-                "merged_schema": {
-                    "customer_orders": ["customer_id", "customer_name", "email", "order_id", "amount", "order_date"]
-                }
-            }
-        }
-
-    def _generate_easy_case_variant(self) -> dict:
-        """Variant: Products and inventory tables."""
-        return {
-            "tables": [
-                {
-                    "name": "products",
-                    "columns": ["product_id", "name", "category"],
-                    "sample_data": [
-                        {"product_id": 1, "name": "Laptop", "category": "Electronics"},
-                        {"product_id": 2, "name": "Chair", "category": "Furniture"}
-                    ]
-                },
-                {
-                    "name": "inventory",
-                    "columns": ["inv_id", "PRODUCT_ID", "quantity", "warehouse"],
-                    "sample_data": [
-                        {"inv_id": 100, "PRODUCT_ID": 1, "quantity": 50, "warehouse": "A"},
-                        {"inv_id": 101, "PRODUCT_ID": 2, "quantity": 30, "warehouse": "B"}
-                    ]
-                }
-            ],
-            "ground_truth": {
-                "primary_keys": {"products": "product_id", "inventory": "inv_id"},
-                "join_columns": [["products.product_id", "inventory.PRODUCT_ID"]],
-                "inconsistencies": ["product_id vs PRODUCT_ID (case)"],
-                "merged_schema": {
-                    "product_inventory": ["product_id", "name", "category", "inv_id", "quantity", "warehouse"]
-                }
-            }
-        }
-
-    def _generate_medium_case(self) -> dict:
-        """Three tables with mixed naming conventions."""
-        return {
-            "tables": [
-                {
-                    "name": "users",
-                    "columns": ["user_id", "userName", "email_address"],
-                    "sample_data": [
-                        {"user_id": 1, "userName": "alice123", "email_address": "alice@test.com"},
-                        {"user_id": 2, "userName": "bob456", "email_address": "bob@test.com"}
-                    ]
-                },
-                {
-                    "name": "products",
-                    "columns": ["ProductID", "product_name", "Price"],
-                    "sample_data": [
-                        {"ProductID": 10, "product_name": "Widget", "Price": 29.99},
-                        {"ProductID": 11, "product_name": "Gadget", "Price": 49.99}
-                    ]
-                },
-                {
-                    "name": "purchases",
-                    "columns": ["purchase_id", "USER_ID", "productId", "quantity"],
-                    "sample_data": [
-                        {"purchase_id": 1001, "USER_ID": 1, "productId": 10, "quantity": 2},
-                        {"purchase_id": 1002, "USER_ID": 2, "productId": 11, "quantity": 1}
-                    ]
-                }
-            ],
-            "ground_truth": {
-                "primary_keys": {"users": "user_id", "products": "ProductID", "purchases": "purchase_id"},
-                "join_columns": [
-                    ["users.user_id", "purchases.USER_ID"],
-                    ["products.ProductID", "purchases.productId"]
-                ],
-                "inconsistencies": [
-                    "user_id vs USER_ID (case)",
-                    "ProductID vs productId (case)",
-                    "Mixed naming: snake_case, camelCase, UPPER_CASE"
-                ],
-                "merged_schema": {
-                    "user_purchases": ["user_id", "user_name", "email", "purchase_id", "product_id", "product_name", "price", "quantity"]
-                }
-            }
-        }
-
-    def _generate_medium_case_variant(self) -> dict:
-        """Variant: Students, courses, and enrollments."""
-        return {
-            "tables": [
-                {
-                    "name": "students",
-                    "columns": ["studentId", "full_name", "major"],
-                    "sample_data": [
-                        {"studentId": "S001", "full_name": "Alice Smith", "major": "CS"},
-                        {"studentId": "S002", "full_name": "Bob Jones", "major": "Math"}
-                    ]
-                },
-                {
-                    "name": "courses",
-                    "columns": ["COURSE_ID", "courseName", "credits"],
-                    "sample_data": [
-                        {"COURSE_ID": "CS101", "courseName": "Intro to Programming", "credits": 3},
-                        {"COURSE_ID": "MATH201", "courseName": "Calculus II", "credits": 4}
-                    ]
-                },
-                {
-                    "name": "enrollments",
-                    "columns": ["enrollment_id", "student_ID", "courseId", "grade"],
-                    "sample_data": [
-                        {"enrollment_id": 1, "student_ID": "S001", "courseId": "CS101", "grade": "A"},
-                        {"enrollment_id": 2, "student_ID": "S002", "courseId": "MATH201", "grade": "B"}
-                    ]
-                }
-            ],
-            "ground_truth": {
-                "primary_keys": {"students": "studentId", "courses": "COURSE_ID", "enrollments": "enrollment_id"},
-                "join_columns": [
-                    ["students.studentId", "enrollments.student_ID"],
-                    ["courses.COURSE_ID", "enrollments.courseId"]
-                ],
-                "inconsistencies": [
-                    "studentId vs student_ID (case and format)",
-                    "COURSE_ID vs courseId (case)",
-                    "Mixed: camelCase, UPPER_CASE, snake_case"
-                ],
-                "merged_schema": {
-                    "student_enrollments": ["student_id", "full_name", "major", "course_id", "course_name", "credits", "enrollment_id", "grade"]
-                }
-            }
-        }
-
-    def _generate_hard_case(self) -> dict:
-        """Five tables with complex relationships."""
-        return {
-            "tables": [
-                {
-                    "name": "employees",
-                    "columns": ["emp_id", "name", "dept_id", "manager_id"],
-                    "sample_data": [
-                        {"emp_id": 1, "name": "John", "dept_id": 100, "manager_id": None},
-                        {"emp_id": 2, "name": "Jane", "dept_id": 100, "manager_id": 1}
-                    ]
-                },
-                {
-                    "name": "departments",
-                    "columns": ["DeptID", "DeptName", "location_id"],
-                    "sample_data": [
-                        {"DeptID": 100, "DeptName": "Engineering", "location_id": 1},
-                        {"DeptID": 101, "DeptName": "Sales", "location_id": 2}
-                    ]
-                },
-                {
-                    "name": "locations",
-                    "columns": ["id", "city", "country"],
-                    "sample_data": [
-                        {"id": 1, "city": "San Francisco", "country": "USA"},
-                        {"id": 2, "city": "New York", "country": "USA"}
-                    ]
-                },
-                {
-                    "name": "projects",
-                    "columns": ["project_id", "projectName", "lead_emp_id", "department"],
-                    "sample_data": [
-                        {"project_id": "P001", "projectName": "Alpha", "lead_emp_id": 1, "department": 100}
-                    ]
-                },
-                {
-                    "name": "assignments",
-                    "columns": ["assignment_id", "Employee_ID", "Project", "hours"],
-                    "sample_data": [
-                        {"assignment_id": 1, "Employee_ID": 1, "Project": "P001", "hours": 40}
-                    ]
-                }
-            ],
-            "ground_truth": {
-                "primary_keys": {
-                    "employees": "emp_id",
-                    "departments": "DeptID",
-                    "locations": "id",
-                    "projects": "project_id",
-                    "assignments": "assignment_id"
-                },
-                "join_columns": [
-                    ["employees.dept_id", "departments.DeptID"],
-                    ["departments.location_id", "locations.id"],
-                    ["employees.emp_id", "projects.lead_emp_id"],
-                    ["projects.department", "departments.DeptID"],
-                    ["employees.emp_id", "assignments.Employee_ID"],
-                    ["projects.project_id", "assignments.Project"]
-                ],
-                "inconsistencies": [
-                    "dept_id vs DeptID vs department",
-                    "emp_id vs Employee_ID vs lead_emp_id",
-                    "project_id vs Project",
-                    "locations.id is ambiguous"
-                ],
-                "merged_schema": {
-                    "organization": [
-                        "employee_id", "employee_name", "manager_id",
-                        "department_id", "department_name",
-                        "location_id", "city", "country",
-                        "project_id", "project_name",
-                        "assignment_id", "hours"
-                    ]
-                }
-            }
-        }
-
-    def _generate_hard_case_variant(self) -> dict:
-        """Variant: E-commerce with suppliers, products, orders, customers, reviews."""
-        return {
-            "tables": [
-                {
-                    "name": "suppliers",
-                    "columns": ["supplier_id", "supplierName", "country"],
-                    "sample_data": [
-                        {"supplier_id": 1, "supplierName": "Acme Corp", "country": "USA"},
-                        {"supplier_id": 2, "supplierName": "Global Trade", "country": "UK"}
-                    ]
-                },
-                {
-                    "name": "products",
-                    "columns": ["ProductID", "product_name", "SUPPLIER_ID", "price"],
-                    "sample_data": [
-                        {"ProductID": 100, "product_name": "Widget", "SUPPLIER_ID": 1, "price": 29.99},
-                        {"ProductID": 101, "product_name": "Gadget", "SUPPLIER_ID": 2, "price": 49.99}
-                    ]
-                },
-                {
-                    "name": "customers",
-                    "columns": ["custId", "CustomerName", "email"],
-                    "sample_data": [
-                        {"custId": "C001", "CustomerName": "Alice", "email": "alice@test.com"},
-                        {"custId": "C002", "CustomerName": "Bob", "email": "bob@test.com"}
-                    ]
-                },
-                {
-                    "name": "orders",
-                    "columns": ["order_id", "customer", "product_id", "qty"],
-                    "sample_data": [
-                        {"order_id": 1001, "customer": "C001", "product_id": 100, "qty": 2},
-                        {"order_id": 1002, "customer": "C002", "product_id": 101, "qty": 1}
-                    ]
-                },
-                {
-                    "name": "reviews",
-                    "columns": ["ReviewID", "productID", "CUSTOMER_ID", "rating"],
-                    "sample_data": [
-                        {"ReviewID": 1, "productID": 100, "CUSTOMER_ID": "C001", "rating": 5},
-                        {"ReviewID": 2, "productID": 101, "CUSTOMER_ID": "C002", "rating": 4}
-                    ]
-                }
-            ],
-            "ground_truth": {
-                "primary_keys": {
-                    "suppliers": "supplier_id",
-                    "products": "ProductID",
-                    "customers": "custId",
-                    "orders": "order_id",
-                    "reviews": "ReviewID"
-                },
-                "join_columns": [
-                    ["suppliers.supplier_id", "products.SUPPLIER_ID"],
-                    ["products.ProductID", "orders.product_id"],
-                    ["customers.custId", "orders.customer"],
-                    ["products.ProductID", "reviews.productID"],
-                    ["customers.custId", "reviews.CUSTOMER_ID"]
-                ],
-                "inconsistencies": [
-                    "supplier_id vs SUPPLIER_ID (case)",
-                    "ProductID vs product_id vs productID (case and format)",
-                    "custId vs customer vs CUSTOMER_ID",
-                    "Mixed: camelCase, snake_case, UPPER_CASE"
-                ],
-                "merged_schema": {
-                    "ecommerce": [
-                        "supplier_id", "supplier_name", "country",
-                        "product_id", "product_name", "price",
-                        "customer_id", "customer_name", "email",
-                        "order_id", "quantity",
-                        "review_id", "rating"
-                    ]
-                }
-            }
-        }
-
-    def evaluate_response(self, response: dict, ground_truth: dict) -> tuple:
-        """Score the purple agent's response against ground truth."""
-        score = 0
+        Returns (score, details) where score is 0-100.
+        """
+        ground_truth = self.ground_truth
         details = {}
-
-        pk_score, pk_detail = self._score_primary_keys(
-            response.get("primary_keys", {}),
-            ground_truth["primary_keys"]
-        )
-        score += pk_score
-        details["primary_keys"] = {"score": pk_score, "max": 25, "detail": pk_detail}
-
-        join_score, join_detail = self._score_join_columns(
-            response.get("join_columns", []),
-            ground_truth["join_columns"]
-        )
-        score += join_score
-        details["join_columns"] = {"score": join_score, "max": 25, "detail": join_detail}
-
-        inc_score, inc_detail = self._score_inconsistencies(
-            response.get("inconsistencies", []),
-            ground_truth["inconsistencies"]
-        )
-        score += inc_score
-        details["inconsistencies"] = {"score": inc_score, "max": 25, "detail": inc_detail}
-
-        schema_score, schema_detail = self._score_merged_schema(
-            response.get("merged_schema", {}),
-            ground_truth["merged_schema"]
-        )
-        score += schema_score
-        details["merged_schema"] = {"score": schema_score, "max": 25, "detail": schema_detail}
-
-        return score, details
-
-    def _score_primary_keys(self, response: dict, expected: dict) -> tuple:
-        if not response:
-            return 0, "No primary keys provided"
-        correct = 0
-        total = len(expected)
-        for table, key in expected.items():
-            resp_key = response.get(table, "").lower().replace("_", "")
-            exp_key = key.lower().replace("_", "")
-            if resp_key == exp_key:
-                correct += 1
-        score = int(25 * correct / total) if total > 0 else 0
-        return score, f"{correct}/{total} tables correct"
-
-    def _score_join_columns(self, response: list, expected: list) -> tuple:
-        if not response:
-            return 0, "No join columns provided"
-        def normalize_pair(pair):
-            if len(pair) != 2:
-                return None
-            return tuple(sorted([p.lower().replace("_", "") for p in pair]))
-        expected_set = {normalize_pair(p) for p in expected if normalize_pair(p)}
-        response_set = {normalize_pair(p) for p in response if normalize_pair(p)}
-        correct = len(expected_set & response_set)
-        total = len(expected_set)
-        score = int(25 * correct / total) if total > 0 else 0
-        return score, f"{correct}/{total} join relationships found"
-
-    def _score_inconsistencies(self, response: list, expected: list) -> tuple:
-        """Score naming inconsistency detection with nuanced evaluation.
-        
-        Scoring breakdown (25 points total):
-        - Count match: 5 points if detected count is within 1 of expected
-        - Column mentions: 10 points based on mentioning specific columns
-        - Terminology: 10 points for using proper terms (case, naming, etc.)
-        """
-        if not response:
-            return 0, "No inconsistencies identified"
-        
-        response_text = " ".join(response).lower()
         total_score = 0
         
-        # Count match (5 points) - reward if they found approximately right number
-        expected_count = len(expected)
-        actual_count = len(response)
-        if actual_count == expected_count:
-            total_score += 5
-        elif abs(actual_count - expected_count) == 1:
-            total_score += 3
-        elif actual_count > 0:
-            total_score += 1
+        # 1. Column check (20 points)
+        expected_cols = set(ground_truth.columns)
+        submitted_cols = set(submitted.columns)
         
-        # Column name mentions (10 points) - check if specific columns are mentioned
-        column_patterns = []
-        for exp in expected:
-            # Extract column names from expected (e.g., "cust_id vs customer_ID" -> ["cust_id", "customer_ID"])
-            words = re.findall(r'[a-zA-Z_]+[iI][dD]|[a-zA-Z_]+_[a-zA-Z_]+', exp)
-            column_patterns.extend(words)
+        missing_cols = expected_cols - submitted_cols
+        extra_cols = submitted_cols - expected_cols
+        matching_cols = expected_cols & submitted_cols
         
-        columns_mentioned = 0
-        for col in column_patterns:
-            # Normalize for comparison
-            col_normalized = col.lower().replace("_", "")
-            if col_normalized in response_text.replace("_", ""):
-                columns_mentioned += 1
-        
-        if column_patterns:
-            col_score = min(10, int(10 * columns_mentioned / len(column_patterns)))
-        else:
-            col_score = 5 if len(response) > 0 else 0
+        col_score = int(20 * len(matching_cols) / len(expected_cols)) if expected_cols else 0
         total_score += col_score
         
-        # Terminology (10 points) - check for proper terminology
-        terminology = {
-            "case": 2,           # mentions case sensitivity
-            "naming": 2,         # mentions naming conventions
-            "convention": 2,     # mentions conventions
-            "inconsisten": 2,    # mentions inconsistency
-            "snake": 1,          # mentions snake_case
-            "camel": 1,          # mentions camelCase  
-            "upper": 1,          # mentions UPPER_CASE
-            "format": 1,         # mentions format differences
+        details["columns"] = {
+            "score": col_score,
+            "max": 20,
+            "expected": list(expected_cols),
+            "submitted": list(submitted_cols),
+            "missing": list(missing_cols),
+            "extra": list(extra_cols),
         }
         
-        term_score = 0
-        for term, points in terminology.items():
-            if term in response_text:
-                term_score += points
-        total_score += min(10, term_score)
+        if not matching_cols or "customer_id" not in matching_cols:
+            details["error"] = "Missing required columns including customer_id"
+            return total_score, details
         
-        return min(25, total_score), f"Found {actual_count} inconsistencies (expected {expected_count})"
-
-    def _score_merged_schema(self, response: dict, expected: dict) -> tuple:
-        if not response:
-            return 0, "No merged schema provided"
-        if not isinstance(response, dict):
-            return 5, "Schema provided but wrong format"
-        expected_cols = set()
-        for cols in expected.values():
-            expected_cols.update(c.lower().replace("_", "") for c in cols)
-        response_cols = set()
-        for cols in response.values():
-            if isinstance(cols, list):
-                response_cols.update(c.lower().replace("_", "") for c in cols)
-        if not response_cols:
-            return 5, "Schema has no columns"
-        overlap = len(expected_cols & response_cols)
-        coverage = overlap / len(expected_cols) if expected_cols else 0
-        score = int(25 * coverage)
-        return score, f"{overlap}/{len(expected_cols)} expected columns present"
-
-    def _extract_json(self, text: str):
-        json_match = re.search(r'```(?:json)?\s*(\{.*?\})\s*```', text, re.DOTALL)
-        if json_match:
+        # 2. Row count check (10 points)
+        row_diff = abs(len(submitted) - len(ground_truth))
+        if row_diff == 0:
+            row_score = 10
+        elif row_diff <= 5:
+            row_score = 8
+        elif row_diff <= 10:
+            row_score = 5
+        elif row_diff <= 20:
+            row_score = 2
+        else:
+            row_score = 0
+        
+        total_score += row_score
+        details["row_count"] = {
+            "score": row_score,
+            "max": 10,
+            "expected": len(ground_truth),
+            "submitted": len(submitted),
+            "difference": row_diff,
+        }
+        
+        # 3. Customer coverage (15 points)
+        gt_customers = set(ground_truth["customer_id"])
+        sub_customers = set(submitted["customer_id"])
+        
+        matching_customers = gt_customers & sub_customers
+        coverage = len(matching_customers) / len(gt_customers) if gt_customers else 0
+        coverage_score = int(15 * coverage)
+        total_score += coverage_score
+        
+        details["customer_coverage"] = {
+            "score": coverage_score,
+            "max": 15,
+            "expected_customers": len(gt_customers),
+            "submitted_customers": len(sub_customers),
+            "matching_customers": len(matching_customers),
+            "coverage_pct": round(coverage * 100, 2),
+        }
+        
+        if not matching_customers:
+            details["error"] = "No matching customers found"
+            return total_score, details
+        
+        # Merge for detailed comparison
+        try:
+            merged = pd.merge(
+                ground_truth,
+                submitted,
+                on="customer_id",
+                how="inner",
+                suffixes=("_expected", "_submitted")
+            )
+        except Exception as e:
+            details["merge_error"] = str(e)
+            return total_score, details
+        
+        # 4. Numeric accuracy (40 points total)
+        numeric_cols = ["num_accounts", "total_balance", "num_trades", "total_trade_volume", "total_trade_value"]
+        numeric_score = 0
+        numeric_details = {}
+        
+        for col in numeric_cols:
+            col_exp = f"{col}_expected"
+            col_sub = f"{col}_submitted"
+            
+            if col_exp not in merged.columns or col_sub not in merged.columns:
+                numeric_details[col] = {"error": "Column missing from one side"}
+                continue
+            
             try:
-                return json.loads(json_match.group(1))
-            except json.JSONDecodeError:
-                pass
-        json_match = re.search(r'\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}', text, re.DOTALL)
-        if json_match:
-            try:
-                return json.loads(json_match.group(0))
-            except json.JSONDecodeError:
-                pass
+                exp_vals = pd.to_numeric(merged[col_exp], errors="coerce")
+                sub_vals = pd.to_numeric(merged[col_sub], errors="coerce")
+                
+                # Calculate accuracy
+                if col in ["num_accounts", "num_trades", "total_trade_volume"]:
+                    # Integer columns - exact match percentage
+                    exact_matches = (exp_vals == sub_vals).sum()
+                    accuracy = exact_matches / len(merged) if len(merged) > 0 else 0
+                else:
+                    # Float columns - tolerance-based (within 1%)
+                    tolerance = 0.01
+                    close_matches = (abs(exp_vals - sub_vals) <= abs(exp_vals) * tolerance + 0.01).sum()
+                    accuracy = close_matches / len(merged) if len(merged) > 0 else 0
+                
+                col_score = int(8 * accuracy)  # 8 points per column
+                numeric_score += col_score
+                
+                numeric_details[col] = {
+                    "accuracy_pct": round(accuracy * 100, 2),
+                    "score": col_score,
+                    "max": 8,
+                }
+            except Exception as e:
+                numeric_details[col] = {"error": str(e)}
+        
+        total_score += numeric_score
+        details["numeric_accuracy"] = {
+            "score": numeric_score,
+            "max": 40,
+            "columns": numeric_details,
+        }
+        
+        # 5. String fields (15 points)
+        string_score = 0
+        string_details = {}
+        
+        # Customer name check
+        if "customer_name_expected" in merged.columns and "customer_name_submitted" in merged.columns:
+            name_matches = (
+                merged["customer_name_expected"].str.lower().str.strip() == 
+                merged["customer_name_submitted"].str.lower().str.strip()
+            ).sum()
+            name_accuracy = name_matches / len(merged) if len(merged) > 0 else 0
+            name_score = int(5 * name_accuracy)
+            string_score += name_score
+            string_details["customer_name"] = {
+                "accuracy_pct": round(name_accuracy * 100, 2),
+                "score": name_score,
+                "max": 5,
+            }
+        
+        # Country check
+        if "country_expected" in merged.columns and "country_submitted" in merged.columns:
+            country_matches = (
+                merged["country_expected"].str.lower().str.strip() == 
+                merged["country_submitted"].str.lower().str.strip()
+            ).sum()
+            country_accuracy = country_matches / len(merged) if len(merged) > 0 else 0
+            country_score = int(5 * country_accuracy)
+            string_score += country_score
+            string_details["country"] = {
+                "accuracy_pct": round(country_accuracy * 100, 2),
+                "score": country_score,
+                "max": 5,
+            }
+        
+        # Symbols traded check (partial match)
+        if "symbols_traded_expected" in merged.columns and "symbols_traded_submitted" in merged.columns:
+            symbol_scores = []
+            for _, row in merged.iterrows():
+                exp_symbols = set(str(row.get("symbols_traded_expected", "")).split(","))
+                sub_symbols = set(str(row.get("symbols_traded_submitted", "")).split(","))
+                exp_symbols = {s.strip().upper() for s in exp_symbols if s.strip()}
+                sub_symbols = {s.strip().upper() for s in sub_symbols if s.strip()}
+                
+                if exp_symbols:
+                    overlap = len(exp_symbols & sub_symbols) / len(exp_symbols)
+                    symbol_scores.append(overlap)
+            
+            symbol_accuracy = sum(symbol_scores) / len(symbol_scores) if symbol_scores else 0
+            symbol_score = int(5 * symbol_accuracy)
+            string_score += symbol_score
+            string_details["symbols_traded"] = {
+                "accuracy_pct": round(symbol_accuracy * 100, 2),
+                "score": symbol_score,
+                "max": 5,
+            }
+        
+        total_score += string_score
+        details["string_accuracy"] = {
+            "score": string_score,
+            "max": 15,
+            "fields": string_details,
+        }
+        
+        return min(100, total_score), details
+
+    def _looks_like_csv(self, text: str) -> bool:
+        """Check if text looks like CSV data."""
+        lines = text.strip().split("\n")
+        if len(lines) < 2:
+            return False
+        
+        # Check if first line looks like a header with commas
+        header = lines[0]
+        if "," not in header:
+            return False
+        
+        # Check if subsequent lines have similar comma count
+        header_commas = header.count(",")
+        for line in lines[1:min(5, len(lines))]:
+            if abs(line.count(",") - header_commas) > 1:
+                return False
+        
+        return True
+
+    def _extract_csv(self, text: str) -> Optional[str]:
+        """Try to extract CSV from text that might contain other content."""
+        # Look for CSV in code blocks
+        csv_match = re.search(r'```(?:csv)?\s*\n(.*?)\n```', text, re.DOTALL)
+        if csv_match:
+            return csv_match.group(1)
+        
+        # Look for lines that look like CSV
+        lines = text.strip().split("\n")
+        csv_lines = []
+        in_csv = False
+        
+        for line in lines:
+            if "," in line and (in_csv or self._looks_like_header(line)):
+                in_csv = True
+                csv_lines.append(line)
+            elif in_csv and "," not in line:
+                break
+        
+        if csv_lines:
+            return "\n".join(csv_lines)
+        
         return None
+
+    def _looks_like_header(self, line: str) -> bool:
+        """Check if a line looks like a CSV header."""
+        parts = line.split(",")
+        if len(parts) < 3:
+            return False
+        
+        # Headers typically have lowercase/underscore names
+        return all(
+            re.match(r'^[a-zA-Z_][a-zA-Z0-9_]*$', p.strip())
+            for p in parts
+        )
