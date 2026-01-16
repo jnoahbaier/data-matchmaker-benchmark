@@ -1,4 +1,4 @@
-# TPC-DI Data Integration Benchmark - Green Agent
+# Data Matchmaker Benchmark - Green Agent
 
 A Green Agent for the [AgentBeats Competition](https://rdi.berkeley.edu/agentx) that evaluates Purple Agents on their ability to integrate data from multiple sources, join tables correctly, and compute accurate per-customer aggregations.
 
