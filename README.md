@@ -1,6 +1,6 @@
-# Schema Merging Benchmark - Green Agent
+# Data Matchmaker Benchmark - Green Agent
 
-A Green Agent for the AgentBeats competition that evaluates Purple Agents on their ability to merge database schemas, identify primary/foreign keys, and resolve naming inconsistencies.
+A Green Agent for the [AgentBeats Competition](https://rdi.berkeley.edu/agentx) that evaluates Purple Agents on their ability to integrate data from multiple sources, join tables correctly, and compute accurate per-customer aggregations.
 
 --
 
@@ -12,22 +12,45 @@ At scale, agents with this capability can operate across virtually any data-prod
 
 ## What This Benchmark Evaluates
 
-This benchmark tests an agent's data engineering capabilities:
+This benchmark tests a Purple Agent's data integration capabilities using a simplified TPC-DI style task:
 
-| Skill | Description | Points |
-|-------|-------------|--------|
-| **Primary Key Identification** | Correctly identify the primary key for each table | 25 |
-| **Join Column Detection** | Find columns that can be used to join tables | 25 |
-| **Naming Inconsistency Detection** | Identify naming inconsistencies (case, conventions) | 25 |
-| **Schema Merging** | Produce a unified schema with normalized column names | 25 |
+| Component | Description | Points |
+|-----------|-------------|--------|
+| **Column Check** | Correct columns in output | 20 |
+| **Row Count** | Correct number of output rows | 10 |
+| **Customer Coverage** | All customers represented | 15 |
+| **Numeric Accuracy** | Correct aggregation values | 40 |
+| **String Accuracy** | Correct text fields | 15 |
 
-## Difficulty Levels
+The benchmark uses a **hybrid evaluation approach**:
+1. **Deterministic numerical scoring** for accuracy metrics (0-100 points)
+2. **LLM-powered qualitative feedback** for insights and recommendations (via Gemini)
 
-| Level | Tables | Challenges |
-|-------|--------|------------|
-| **Easy** | 2 | Obvious keys, single case inconsistency (`cust_id` vs `customer_ID`) |
-| **Medium** | 3 | Mixed conventions (snake_case, camelCase, UPPER_CASE) |
-| **Hard** | 5 | Complex relationships, ambiguous columns, self-referential joins |
+## The Task
+
+Purple Agents must:
+
+1. **Fetch source data files** via HTTP from the Green Agent:
+   - `customers_tpcdi_lite_v3.csv` - Customer information
+   - `accounts_tpcdi_lite_v3.csv` - Account data linked to customers
+   - `trades_tpcdi_lite_v3.csv` - Trade transactions linked to accounts
+
+2. **Join the tables** correctly:
+   - Accounts → Customers on `customer_id`
+   - Trades → Accounts on `account_id`
+
+3. **Filter** to only completed trades (`trade_status = 'CMPT'`)
+
+4. **Aggregate per customer** to produce:
+   - `customer_id` - Customer identifier
+   - `customer_name` - First + last name
+   - `country` - Customer's country
+   - `num_accounts` - Count of accounts
+   - `total_balance` - Sum of account balances
+   - `num_trades` - Count of completed trades
+   - `total_trade_volume` - Sum of trade quantities
+   - `total_trade_value` - Sum of (quantity × trade_price)
+   - `symbols_traded` - Comma-separated unique stock symbols
 
 ## Quick Start
 
@@ -45,105 +68,151 @@ uv sync
 
 ### Running the Benchmark
 
-**Terminal 1 - Start the Green Agent (evaluator):**
+**Terminal 1 - Start the Green Agent:**
 ```bash
-uv run src/server.py --port 9009
+uv run python src/server.py --host 127.0.0.1 --port 9009
 ```
+
+The Green Agent exposes:
+- **A2A endpoint**: `http://127.0.0.1:9009/` - For agent-to-agent communication
+- **File listing**: `http://127.0.0.1:9009/files/` - Lists available data files
+- **File download**: `http://127.0.0.1:9009/files/{filename}` - Download individual files
 
 **Terminal 2 - Start the Mock Purple Agent (for testing):**
 ```bash
 # Copy and configure your Gemini API key
 cp sample.env .env
-# Edit .env and add your GOOGLE_API_KEY
+# Edit .env and add your GEMINI_API_KEY
 
-uv run src/mock_purple.py --port 9010
+uv run python src/mock_purple.py --host 127.0.0.1 --port 9010
 ```
 
 **Terminal 3 - Run an evaluation:**
 ```bash
-# Easy difficulty
-curl -s -X POST http://localhost:9009/ \
+curl -s -X POST http://127.0.0.1:9009/ \
   -H "Content-Type: application/json" \
-  -d '{"jsonrpc": "2.0", "method": "message/send", "id": "1", "params": {"message": {"kind": "message", "role": "user", "parts": [{"kind": "text", "text": "{\"participants\": {\"schema_merger\": \"http://localhost:9010\"}, \"config\": {\"difficulty\": \"easy\"}}"}], "messageId": "test"}}}' | python3 -m json.tool
+  -d '{
+    "jsonrpc": "2.0",
+    "method": "message/send",
+    "id": "1",
+    "params": {
+      "message": {
+        "kind": "message",
+        "role": "user",
+        "parts": [{
+          "kind": "text",
+          "text": "{\"participants\": {\"data_integrator\": \"http://127.0.0.1:9010\"}, \"config\": {\"timeout\": 300}}"
+        }],
+        "messageId": "test"
+      }
+    }
+  }' | python3 -m json.tool
+```
 
-# Medium difficulty
-curl -s -X POST http://localhost:9009/ \
-  -H "Content-Type: application/json" \
-  -d '{"jsonrpc": "2.0", "method": "message/send", "id": "1", "params": {"message": {"kind": "message", "role": "user", "parts": [{"kind": "text", "text": "{\"participants\": {\"schema_merger\": \"http://localhost:9010\"}, \"config\": {\"difficulty\": \"medium\"}}"}], "messageId": "test"}}}' | python3 -m json.tool
+### Using the AgentBeats CLI
 
-# Hard difficulty
-curl -s -X POST http://localhost:9009/ \
-  -H "Content-Type: application/json" \
-  -d '{"jsonrpc": "2.0", "method": "message/send", "id": "1", "params": {"message": {"kind": "message", "role": "user", "parts": [{"kind": "text", "text": "{\"participants\": {\"schema_merger\": \"http://localhost:9010\"}, \"config\": {\"difficulty\": \"hard\"}}"}], "messageId": "test"}}}' | python3 -m json.tool
+If you have the AgentBeats CLI installed:
+
+```bash
+uv run agentbeats-run scenario.toml
 ```
 
 ## Project Structure
 
 ```
 src/
-├── server.py        # A2A server setup and agent card
-├── agent.py         # Green agent: test generation + scoring
+├── server.py        # A2A server + file serving endpoints
+├── main.py          # Alternative entry point with MCP server
+├── agent.py         # Green agent: task generation + scoring + LLM feedback
 ├── executor.py      # A2A request handling
 ├── messenger.py     # A2A messaging utilities
+├── mcp_server.py    # MCP resources for file access (optional)
 └── mock_purple.py   # Baseline purple agent for testing
+
+jan15_tasks/
+├── customers_tpcdi_lite_v3.csv    # Customer data
+├── accounts_tpcdi_lite_v3.csv     # Account data
+├── trades_tpcdi_lite_v3.csv       # Trade transactions
+├── prospect_tpcdi_lite_v3.xlsx    # Additional prospect data
+├── finwire_tpcdi_lite_v3.xml      # Financial wire data
+└── gold_ground_truth_tpcdi_lite_v3.csv  # Expected results (not exposed)
 ```
 
 ## Input Format
 
-The Green Agent expects a JSON message with:
+The Green Agent expects an A2A assessment request with:
 
 ```json
 {
   "participants": {
-    "schema_merger": "http://purple-agent-url:port"
+    "data_integrator": "http://purple-agent-url:port"
   },
   "config": {
-    "difficulty": "easy|medium|hard"
+    "timeout": 300,
+    "file_server_url": "http://green-agent-url:port"
   }
 }
 ```
 
 ## Output Format
 
-The Green Agent returns an evaluation result:
+The Green Agent returns a detailed evaluation:
 
 ```json
 {
   "score": 87,
   "max_score": 100,
-  "difficulty": "easy",
   "details": {
-    "primary_keys": {"score": 25, "max": 25, "detail": "2/2 tables correct"},
-    "join_columns": {"score": 25, "max": 25, "detail": "1/1 join relationships found"},
-    "inconsistencies": {"score": 12, "max": 25, "detail": "Found 1 inconsistencies"},
-    "merged_schema": {"score": 25, "max": 25, "detail": "6/6 expected columns present"}
+    "columns": {"score": 20, "max": 20, "missing": [], "extra": []},
+    "row_count": {"score": 10, "max": 10, "expected": 100, "submitted": 100},
+    "customer_coverage": {"score": 15, "max": 15, "coverage_pct": 100.0},
+    "numeric_accuracy": {"score": 32, "max": 40, "columns": {...}},
+    "string_accuracy": {"score": 10, "max": 15, "fields": {...}}
   },
-  "test_case": { ... },
-  "purple_response": { ... }
+  "llm_feedback": {
+    "enabled": true,
+    "summary": "Good overall performance with minor aggregation issues...",
+    "strengths": ["Correct table joins", "Complete customer coverage"],
+    "weaknesses": ["Trade value calculation off by ~2%"],
+    "recommendations": ["Verify trade_price handling"]
+  },
+  "purple_agent_url": "http://127.0.0.1:9010",
+  "submitted_rows": 100,
+  "expected_rows": 100
 }
 ```
 
 ## Purple Agent Requirements
 
-Purple agents must return JSON with this structure:
+Purple agents must:
 
-```json
-{
-  "primary_keys": {"table_name": "column_name", ...},
-  "join_columns": [["table1.col", "table2.col"], ...],
-  "inconsistencies": ["description of inconsistency", ...],
-  "merged_schema": {"unified_table_name": ["col1", "col2", ...]}
-}
+1. **Accept a task message** describing the data integration task
+2. **Fetch data files** via HTTP GET from the provided URLs
+3. **Return CSV data** with the expected columns
+
+Example response format:
+```csv
+customer_id,customer_name,country,num_accounts,total_balance,num_trades,total_trade_volume,total_trade_value,symbols_traded
+1,John Smith,USA,2,15000.50,5,100,12500.00,"AAPL,GOOGL"
+2,Jane Doe,Canada,1,8000.00,3,50,4500.00,"MSFT"
 ```
+
+## Environment Variables
+
+| Variable | Description | Required |
+|----------|-------------|----------|
+| `GEMINI_API_KEY` | API key for LLM feedback generation | Optional |
+| `FILE_SERVER_URL` | Override file server URL | Optional |
+| `MCP_SERVER_URL` | MCP server URL for main.py | Optional |
 
 ## Running with Docker
 
 ```bash
 # Build the green agent
-docker build -t schema-evaluator .
+docker build -t tpcdi-evaluator .
 
 # Run
-docker run -p 9009:9009 schema-evaluator
+docker run -p 9009:9009 -e GEMINI_API_KEY=your_key tpcdi-evaluator
 ```
 
 ## Running Tests
@@ -157,9 +226,9 @@ uv run pytest tests/
 
 This is a submission for the [AgentBeats Competition](https://rdi.berkeley.edu/agentx) Phase 1 (Green Agent).
 
-- **Track**: Data Engineering / Other Agent
-- **Benchmark Type**: New benchmark
-- **Skills Tested**: Schema analysis, key identification, naming convention detection
+- **Track**: Data Engineering
+- **Benchmark Type**: TPC-DI Style Data Integration
+- **Skills Tested**: Data fetching, table joining, filtering, aggregation, ETL
 
 ## License
 
